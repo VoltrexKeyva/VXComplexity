@@ -1,0 +1,149 @@
+const { MessageEmbed, Util } = require('discord.js'),
+  fetchNode = require('node-fetch'),
+  moment = require('moment');
+
+module.exports = {
+  name: 'ghuser',
+  description: 'Shows information about a github user.',
+  usage: 'ghuser <github user username>',
+  aliases: [],
+  category: 'general',
+  permissions: [],
+  async execute(message, args, bot) {
+    if (!args[0])
+      return message.channel.send(
+        bot.tools.invalidArguments(message, this.usage)
+      );
+
+    const user = await fetchNode(
+      `https://api.github.com/users/${args.join(' ')}`
+    ).then((res) => res.json());
+
+    if (!user || user.message)
+      return message.channel.send(
+        "I wasn't able to find any github users with the given username."
+      );
+
+    const githubUserEmbeds = [],
+    {
+      avatar_url,
+      login,
+      html_url,
+      site_admin,
+      id,
+      gravatar_id,
+      type,
+      bio,
+      created_at,
+      updated_at,
+      name,
+      company,
+      location,
+      blog,
+      email,
+      twitter_username,
+      public_repos,
+      public_gists,
+      followers,
+      following
+    } = user;
+
+    const mainInfoEmbed = new MessageEmbed()
+      .setColor('#0033ff')
+      .setAuthor('GitHub user information', avatar_url)
+      .addField(
+        'Username',
+        `[${login}](${html_url})${site_admin ? ' **[Site admin]**' : ''}`,
+        false
+      )
+      .addField('ID', id, true);
+
+    if (gravatar_id) mainInfoEmbed.addField('Gravatar ID', gravatar_id, true);
+
+    mainInfoEmbed.addField('Type', type, true);
+
+    if (bio) mainInfoEmbed.addField('Bio', bio, false);
+
+    const created = moment.utc(created_at),
+      updated = moment.utc(updated_at);
+
+    mainInfoEmbed.addField(
+      'Created at',
+      `${created.format('ddd, MMM Do, YYYY h:mm:ss a')} (${created.fromNow()})`,
+      false
+    )
+    .addField(
+      'Updated at',
+      `${updated.format('ddd, MMM Do, YYYY h:mm:ss a')} (${updated.fromNow()})`,
+      false
+    );
+
+    const additionalInfoEmbed = [
+      name,
+      company,
+      location,
+      blog,
+      email,
+      twitter_username
+    ].some((T) => !!T)
+      ? new MessageEmbed()
+          .setColor('#0033ff')
+          .setAuthor('Additional information', avatar_url)
+      : null;
+
+    if (additionalInfoEmbed) {
+      if (name)
+        additionalInfoEmbed.addField('Name', Util.escapeMarkdown(name), false);
+
+      if (company)
+        additionalInfoEmbed.addField(
+          'Company',
+          Util.escapeMarkdown(company),
+          false
+        );
+
+      if (location)
+        additionalInfoEmbed.addField(
+          'Location',
+          Util.escapeMarkdown(location),
+          false
+        );
+
+      if (blog) additionalInfoEmbed.addField('Blog', blog, false);
+
+      if (email) additionalInfoEmbed.addField('Email', email, false);
+
+      if (twitter_username)
+        additionalInfoEmbed.addField(
+          'Twitter username',
+          Util.escapeMarkdown(twitter_username),
+          false
+        );
+    }
+
+    const statisticsEmbed = new MessageEmbed()
+      .setColor('#0033ff')
+      .setAuthor('Statistics', avatar_url)
+      .addField('Public repositories', public_repos.toLocaleString(), true)
+      .addField('Public gists', public_gists.toLocaleString(), true)
+      .addField('Followers', followers.toLocaleString(), true)
+      .addField('Following', following.toLocaleString(), true);
+
+    const avatarEmbed = new MessageEmbed()
+      .setColor('#0033ff')
+      .setTitle('User avatar', avatar_url)
+      .setImage(avatar_url);
+
+    githubUserEmbeds.push(
+      ...[mainInfoEmbed, additionalInfoEmbed, statisticsEmbed, avatarEmbed].filter(
+        (e) => !!e
+      )
+    );
+
+    return bot.tools.paginate(message, {
+      type: 'embed',
+      messages: githubUserEmbeds,
+      time: 180000
+    });
+  }
+};

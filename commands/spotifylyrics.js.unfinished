@@ -1,0 +1,67 @@
+const { MessageEmbed, Util } = require('discord.js'),
+  geniusLyricsApi = require('genius-lyrics-api'),
+  stringToolkit = require('string-toolkit');
+
+module.exports = {
+  name: 'spotifylyrics',
+  description: 'Shows lyrics of a dpotify song a user is listening to.',
+  usage: 'spotifylyrics [user]',
+  aliases: ['sl'],
+  category: 'general',
+  permissions: [],
+  async execute(message, args, bot) {
+    const user = bot.tools.parseUser(message, args),
+      activity = user.presence.activities.find(
+        ({ type, name }) => type === 'LISTENING' && name === 'Spotify'
+      );
+
+    if (!activity)
+      return message.channel.send(
+        `**${Util.escapeMarkdown(user.tag)}** doesn't have a spotify activity.`
+      );
+
+    const lyrics = await geniusLyricsApi.getLyrics({
+      apiKey:
+        'PemJiM7fRu8FVw5GYTl8W_VjRxwVrlDpTHbovOyZuIaEShBcv9vjIjSWlPCmBfWA',
+      title: activity.details,
+      artist: activity.state,
+      optimizeQuery: true
+    });
+
+    if (!lyrics)
+      return message.channel.send(
+        `lyrics for the spotify presence of **${Util.escapeMarkdown(
+          user.tag
+        )}** was not found.`
+      );
+
+    const title = `${user.tag}'s spotify presence song lyrics`,
+      userAvatar = user.displayAvatarURL({
+        dynamic: true,
+        size: 1024,
+        format: 'png'
+      }),
+      lyricsEmbeds = stringToolkit.toChunks(lyrics, 2048).map((chunk) => {
+        const embed = new MessageEmbed()
+          .setColor('#0033ff')
+          .setAuthor(title, userAvatar)
+          .setDescription(chunk);
+
+        if (activity.assets)
+          embed.setThumbnail(
+            activity.assets.largeImageURL({
+              size: 1024,
+              format: 'png'
+            })
+          );
+
+        return embed;
+      });
+
+    return bot.tools.paginate(message, {
+      type: 'embed',
+      messages: lyricsEmbeds,
+      time: 180000
+    });
+  }
+};

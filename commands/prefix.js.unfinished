@@ -1,0 +1,78 @@
+const {
+  Permissions: {
+    FLAGS: { MANAGE_GUILD }
+  },
+  Util
+} = require('discord.js');
+
+module.exports = {
+  name: 'prefix',
+  description:
+    'Changes the prefix of the bot specifically for the server the command was used on.',
+  usage: 'prefix <prefix>',
+  aliases: [],
+  category: 'general',
+  permissions: [
+    {
+      bitfield: MANAGE_GUILD,
+      bot: false
+    }
+  ],
+  async execute(message, args, bot) {
+    if (!args[0])
+      return message.channel.send(
+        bot.tools.invalidArguments(message, this.usage)
+      );
+
+    const joined = args.join(' ').toLowerCase();
+
+    if (joined.length > 10)
+      return message.channel.send('Prefix cannot be longer than 10 characters.');
+
+    if (joined === bot.prefix)
+      return message.channel.send(
+        `My prefix is already ${Util.escapeMarkdown(
+          bot.prefix
+        )} for this server.`,
+        {
+          allowedMentions: {
+            parse: []
+          }
+        }
+      );
+
+    const prefixes = bot.db.collection('prefixes');
+
+    if (
+      !(await prefixes.findOne({
+        'g_id.id': message.guild.id
+      }))
+    )
+      await prefixes.insertOne({
+        g_id: {
+          id: message.guild.id,
+          prefix: joined
+        }
+      });
+    else
+      await prefixes.findOneAndUpdate(
+        {
+          'g_id.id': message.guild.id
+        },
+        {
+          $set: {
+            'g_id.prefix': joined
+          }
+        }
+      );
+
+    return message.channel.send(
+      `${Util.escapeMarkdown(joined)} is now my prefix for this server.`,
+      {
+        allowedMentions: {
+          parse: []
+        }
+      }
+    );
+  }
+};

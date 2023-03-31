@@ -1,0 +1,134 @@
+const {
+    MessageEmbed,
+    Util,
+    Permissions: { FLAGS }
+  } = require('discord.js'),
+  permissionFlags = Object.entries(FLAGS).reduce(
+    (T, [K, V]) => ((T[V] = K), T),
+    {}
+  );
+
+module.exports = {
+  name: 'help',
+  description: 'Shows all the available commands of the bot.',
+  usage: 'help [category index|command]',
+  aliases: ['h'],
+  category: 'general',
+  permissions: [],
+  async execute(message, args, bot) {
+    const query = args[0]?.toLowerCase(),
+      command = bot.commands.get(query) || bot.aliases.get(query),
+      categories = [...new Set(bot.commands.map(({ category }) => category))],
+      queryInt = parseInt(query),
+      botAvatar = bot.user.displayAvatarURL({
+        dynamic: true,
+        size: 1024,
+        format: 'png'
+      });
+
+    if (command) {
+      const {
+          description,
+          name,
+          usage,
+          category,
+          aliases,
+          permissions
+        } = command,
+        commandInfoEmbed = new MessageEmbed()
+          .setColor('#0033ff')
+          .setAuthor('Command information', botAvatar)
+          .setDescription(description)
+          .addField('Name', name, true)
+          .addField('Usage', `\`${usage}\``, false)
+          .addField(
+            'Category',
+            `${category[0].toUpperCase()}${category.slice(1)}`,
+            true
+          );
+
+      if (aliases.length)
+        commandInfoEmbed.addField(
+          'Aliases',
+          aliases.map((alias) => `\`${alias}\``).join(' | '),
+          false
+        );
+
+      if (permissions.length)
+        commandInfoEmbed.addField(
+          'Permissions',
+          permissions
+            .map(
+              (permission) =>
+                `\`${permissionFlags[permission.bitfield].toProperCase()}\``
+            )
+            .join(' | '),
+          false
+        );
+
+      return message.channel.send(commandInfoEmbed);
+    } else if (
+      /^\d+$/.test(query) &&
+      queryInt > 0 &&
+      queryInt <= categories.length
+    ) {
+      const category = categories[queryInt - 1],
+        categoryCommands = bot.commands
+          .filter((command) => command.category === category)
+          .map(({ name }) => `\`${name}\``),
+        title = `${category[0].toUpperCase()}${category.slice(
+          1
+        )} commands (${categoryCommands.length.toLocaleString()})`,
+        isNSFW = category === 'nsfw' && !message.channel.nsfw,
+        chunkCommands = bot.tools.chunkArray([...categoryCommands], 50);
+
+      return bot.tools.paginate(message, {
+        type: 'embed',
+        messages: chunkCommands.map((commands) =>
+          new MessageEmbed()
+            .setColor('#0033ff')
+            .setAuthor(title, botAvatar)
+            .setDescription(
+              isNSFW
+                ? 'NSFW commands are only shown in NSFW channels.'
+                : commands.join(' | ')
+            )
+        ),
+        time: 180000
+      });
+    }
+
+    const botOwner = await bot.users.fetch(bot.ownerids[0]),
+      categoriesEmbed = new MessageEmbed()
+        .setColor('#0033ff')
+        .setAuthor('Categories', botAvatar)
+        .setDescription(
+          `I'm currently handling **${bot.commands.size.toLocaleString()}** commands!`
+        );
+
+    for (let i = 0; i < categories.length; i++)
+      categoriesEmbed.addField(
+        `${categories[i][0].toUpperCase()}${categories[i].slice(
+          1
+        )} (${bot.commands
+          .filter(({ category }) => category === categories[i])
+          .size.toLocaleString()})`,
+        `\`help ${i + 1}\`${
+          categories[i] === 'nsfw' && !message.channel.nsfw
+            ? ' **(NSFW commands are only shown in NSFW channels.)**'
+            : ''
+        }`,
+        false
+      );
+
+    categoriesEmbed.addField(
+      'Developer contact',
+      `If you're having any type of issue with the bot, please let my owner (**${Util.escapeMarkdown(
+        botOwner.tag
+      )}**) know about it.`,
+      false
+    );
+
+    return message.channel.send(categoriesEmbed);
+  }
+};

@@ -1,0 +1,87 @@
+const { MessageEmbed, Util, version } = require('discord.js'),
+  moment = require('moment'),
+  os = require('os');
+
+module.exports = {
+  name: 'info',
+  description: 'Shows info about the bot itself.',
+  usage: 'info',
+  aliases: [],
+  category: 'general',
+  permissions: [],
+  async execute(message, args, bot) {
+    const botEmbeds = [],
+      botAvatar = bot.user.displayAvatarURL({
+        dynamic: true,
+        size: 1024,
+        format: 'png'
+      }),
+      owners = await Promise.all(bot.ownerids.map((id) => bot.users.fetch(id))),
+      created = moment.utc(bot.user.createdTimestamp);
+
+    const mainInfoEmbed = new MessageEmbed()
+      .setColor('#0033ff')
+      .setAuthor('Bot information', botAvatar)
+      .addField('Uptime', bot.Uptime(), false)
+      .addField('Version', bot.tools.version, true)
+      .addField('Library', `discord.js v${version}`, true)
+      .addField('Guilds', bot.guilds.cache.size.toLocaleString(), true)
+      .addField('Channels', bot.channels.cache.size.toLocaleString(), true)
+      .addField(
+        'Users',
+        bot.guilds.cache
+        .filter(({ available }) => available)
+        .reduce((T, { memberCount }) => T + memberCount, 0)
+        .toLocaleString(),
+        true
+      )
+      .addField(
+        'Created at',
+        `${created.format(
+          'ddd, MMM Do, YYYY h:mm:ss a'
+        )} (${created.fromNow()})`,
+        false
+      )
+      .addField(
+        `Owner${owners.length === 1 ? '' : 's'}`,
+        owners
+        .map((owner) => `**${Util.escapeMarkdown(owner.tag)}**`)
+        .join(' • '),
+        false
+      );
+
+    const systemInfoEmbed = new MessageEmbed()
+      .setColor('#0033ff')
+      .setAuthor('System', botAvatar)
+      .addField('Platform', `${process.platform} (${process.arch})`, true)
+      .addField('Node.js version', process.version, true)
+      .addField(
+        'Memory usage',
+        Object.entries(process.memoryUsage())
+        .map(([K, V]) => `• **${K}:** ${(V / 1024 / 1024).toFixed(1)}MB`)
+        .join('\n'),
+        false
+      )
+      .addField('CPU', os.cpus()[0].model, false);
+
+    const linksAndWidgetEmbed = new MessageEmbed()
+      .setColor('#0033ff')
+      .setAuthor('Links and widget', botAvatar)
+      .setDescription(
+        `Invite: [Invite](https://discord.com/oauth2/authorize?client_id=${bot.user.id}&scope=bot&permissions=0) • Support: [Join](https://discord.gg/8uuJwPZ)`
+      )
+      .setImage(
+        `https://top.gg/api/widget/${bot.user.id}.png?v=${(
+          Date.now() >> 0
+        ).toString(36)}`
+      );
+
+    botEmbeds.push(mainInfoEmbed, systemInfoEmbed, linksAndWidgetEmbed);
+
+    return bot.tools.paginate(message, {
+      type: 'embed',
+      messages: botEmbeds,
+      time: 180000
+    });
+  }
+};

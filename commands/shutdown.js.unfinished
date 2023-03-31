@@ -1,0 +1,50 @@
+module.exports = {
+  name: 'shutdown',
+  description: 'Shuts down the bot.',
+  usage: 'shutdown',
+  aliases: [],
+  category: 'owner',
+  permissions: [],
+  async execute(message, args, bot) {
+    if (!bot.ownerids.includes(message.author.id))
+      return message.channel.send(bot.tools.notOwnerEmbed(message));
+
+    const shutdown = await message.channel.send('Shutdown? (Yes|Y/No|N)'),
+      response = await message.channel
+        .awaitMessages(
+          ({ content, author: { id } }) =>
+            ['yes', 'no', 'y', 'n'].includes(content.toLowerCase()) &&
+            id === message.author.id,
+          {
+            max: 1,
+            time: 15000,
+            errors: ['time']
+          }
+        )
+        .then((collected) => collected.first().content.toLowerCase())
+        .catch(() => null);
+
+    if (!response)
+      return message.channel.send(`${message.author} I take that as a no.`);
+
+    if (['no', 'n'].includes(response))
+      return message.channel.send('Cancelled shutdown.');
+
+    if (!shutdown.deleted) await shutdown.delete();
+
+    try {
+      return message.channel
+        .send('Shutting down in 5 seconds...')
+        .then((m) =>
+          setTimeout(
+            async () => (await m.edit('Shutdown successful!'), process.exit()),
+            5000
+          )
+        );
+    } catch (err) {
+      return message.channel.send(
+        `Encountered an error while shutting down:\n\`\`\`js\n${err}\n\`\`\``
+      );
+    }
+  }
+};

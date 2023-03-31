@@ -1,0 +1,293 @@
+const {
+  MessageEmbed,
+  Permissions: {
+    FLAGS: { ADD_REACTIONS }
+  }
+} = require('discord.js');
+
+const reactions = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
+const emojiSpecials = reactions.reduce(
+  (T, O) => ((T[O] = reactions.indexOf(O) + 1), T),
+  {}
+);
+
+function drawBoard(board) {
+  let newBoard = '',
+    round = 1,
+    nums = [
+      [1, 2, 3],
+      [4, 5, 6],
+      [7, 8, 9]
+    ];
+
+  for (let i = 0; i < 9; i++) {
+    if ((i + 1) % 3 === 0) round++;
+
+    newBoard += [1, 4, 7, 9].includes(i + 1)
+      ? `${Array.from(
+          {
+            length: 3
+          },
+          (a, r) => `${' '.repeat(7)}${r === 2 ? '' : '|'}`
+        ).join('')}\n`
+      : [2, 5, 8].includes(i + 1)
+      ? `${Array.from(
+          {
+            length: 3
+          },
+          (a, r) =>
+            `${' '.repeat(3)}${
+              board[
+                round === 1
+                  ? r
+                  : round === 2
+                  ? r + 3
+                  : round === 3
+                  ? r + 6
+                  : null
+              ] || nums[round - 1][r]
+            }${' '.repeat(3)}${r === 2 ? '' : '|'}`
+        ).join('')}\n`
+      : [3, 6].includes(i + 1)
+      ? `${Array.from(
+          {
+            length: 3
+          },
+          (a, r) => `${'_'.repeat(7)}${r === 2 ? '' : '|'}`
+        ).join('')}\n`
+      : null;
+  }
+
+  return newBoard;
+}
+
+function checkWinner(board) {
+  const allPossibleWins = [
+      [1, 2, 3],
+      [4, 5, 6],
+      [7, 8, 9],
+      [1, 4, 7],
+      [2, 5, 8],
+      [3, 6, 9],
+      [1, 5, 9],
+      [3, 5, 7]
+    ],
+    XwinCheck = !!allPossibleWins
+      .map(
+        (win) =>
+          win.map((index) => board[index - 1]).filter((e) => e === 'X')
+            .length === 3
+      )
+      .filter((element) => element).length,
+    OwinCheck = !!allPossibleWins
+      .map(
+        (win) =>
+          win.map((index) => board[index - 1]).filter((e) => e === 'O')
+            .length === 3
+      )
+      .filter((element) => element).length;
+
+  return XwinCheck ? 'X' : OwinCheck ? 'O' : '';
+}
+
+module.exports = {
+  name: 'tictactoe',
+  description: 'Play a tic-tac-toe game with a user.',
+  usage: 'tictactoe <user>',
+  aliases: ['ttt'],
+  category: 'fun',
+  permissions: [
+    {
+      bitfield: ADD_REACTIONS,
+      onlyBot: true
+    }
+  ],
+  async execute(message, args, bot) {
+    const user = bot.tools.parseUser(message, args, {
+      fallbackToAuthor: false
+    });
+
+    if (!user)
+      return message.channel.send(
+        bot.tools.invalidArguments(message, this.usage)
+      );
+
+    if (user.id === message.author.id)
+      return message.channel.send(
+        "You can't challenge yourself to a game of tic tac toe."
+      );
+
+    if (user.bot)
+      return message.channel.send(
+        "You can't challenge bots to a game of tic tac toe."
+      );
+
+    const tic = await message.channel.send(
+      new MessageEmbed()
+        .setColor('#0033ff')
+        .setTitle('A wild tic-tac-toe challenge appears!')
+        .setDescription(
+          `${message.author} challenges ${user} to a game of tic-tac-toe!\n${user} do you accept the challenge?\n__Send \`yes\` to accept and \`no\` to decline, you got 15 seconds__`
+        )
+    );
+
+    const response = await message.channel
+      .awaitMessages(
+        ({ author: { id }, content }) =>
+          id === user.id && ['yes', 'no'].includes(content.toLowerCase()),
+        {
+          max: 1,
+          time: 15000,
+          errors: ['time']
+        }
+      )
+      .then((collected) => collected.first().content.toLowerCase())
+      .catch(() => null);
+
+    if (!response)
+      return message.channel.send(
+        `${message.author} Your opponent didn't accept the challenge in 15 seconds.`
+      );
+
+    if (response === 'no')
+      return message.channel.send(
+        `${message.author} Your opponent declined the challenge.`
+      );
+
+    await tic.delete();
+
+    let board = new Array(9).fill('');
+
+    let boardTemplate = drawBoard(board),
+      players = {
+        player1: {
+          user: message.author,
+          ID: 'X'
+        },
+        player2: {
+          user: user,
+          ID: 'O'
+        }
+      },
+      currentPlayer = players.player1,
+      rounds = Array.from(
+        {
+          length: 9
+        },
+        (_, i) =>
+          i + 1 === 1
+            ? '1st'
+            : i + 1 === 2
+            ? '2nd'
+            : i + 1 === 3
+            ? '3rd'
+            : `${i + 1}th`
+      ),
+      round = 1;
+
+    const boardMessage = await message.channel.send({
+      embed: {
+        color: '#0033ff',
+        title: `It's ${currentPlayer.user.tag}'s turn! (${currentPlayer.ID})\n${
+          rounds[round - 1]
+        } move`,
+        description: `\`\`\`js\n${boardTemplate}\n\`\`\``,
+        timestamp: Date.now()
+      }
+    });
+
+    
+
+    await Promise.all(
+      reactions.map((emoji) => boardMessage.react(emoji).catch(() => null))
+    );
+
+    let matchHasEnded = false,
+      timeout;
+
+    const ids = Object.values(players).map(({ user: { id } }) => id),
+      collector = boardMessage.createReactionCollector(
+        ({ emoji: { name } }, { id }) =>
+          reactions.includes(name) && ids.includes(id),
+        {
+          max: 9
+        }
+      );
+
+    timeout = setTimeout(() => collector.stop('playerTimeout'), 30000);
+
+    collector.on('collect', async ({ emoji: { name } }, { id }) => {
+      if (id !== currentPlayer.user.id) return;
+
+      if (board[emojiSpecials[name] - 1]) return;
+
+      clearTimeout(timeout);
+
+      board[emojiSpecials[name] - 1] = currentPlayer.ID;
+
+      if (round !== 9) round++;
+
+      boardTemplate = drawBoard(board);
+
+      const checkForWin = checkWinner(board);
+
+      if (!checkForWin && !board.filter((element) => element === '').length) {
+        matchHasEnded = true;
+        collector.stop();
+        return await boardMessage.edit({
+          embed: {
+            color: '#0033ff',
+            title: "It's a cat game! (Tie)",
+            description: `\`\`\`js\n${boardTemplate}\n\`\`\``,
+            timestamp: Date.now()
+          }
+        });
+      }
+
+      if (checkForWin) {
+        matchHasEnded = true;
+        collector.stop();
+        return await boardMessage.edit({
+          embed: {
+            color: '#0033ff',
+            title: `${currentPlayer.user.tag} you won on the ${
+              rounds[round - 1]
+            } move!`,
+            description: `\`\`\`js\n${boardTemplate}\n\`\`\``,
+            timestamp: Date.now()
+          }
+        });
+      }
+
+      currentPlayer =
+        currentPlayer.ID === 'X' ? players.player2 : players.player1;
+
+      await boardMessage.edit({
+        embed: {
+          color: '#0033ff',
+          title: `It's ${currentPlayer.user.tag}'s turn! (${
+            currentPlayer.ID
+          })\n${rounds[round - 1]} move`,
+          description: `\`\`\`js\n${boardTemplate}\n\`\`\``,
+          timestamp: Date.now()
+        }
+      });
+
+      timeout = setTimeout(() => collector.stop('playerTimeout'), 30000);
+    });
+
+    collector.on('end', async (_, reason) =>
+      reason === 'playerTimeout'
+        ? await boardMessage.edit({
+            embed: {
+              color: '#0033ff',
+              title: 'Ended!',
+              description:
+                'Game of tic-tac-toe has been closed to due to inactivity',
+              timestamp: Date.now()
+            }
+          })
+        : null
+    );
+  }
+};

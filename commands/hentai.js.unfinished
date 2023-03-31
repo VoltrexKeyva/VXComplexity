@@ -1,0 +1,49 @@
+const { MessageEmbed, Util } = require('discord.js'),
+  fetchNode = require('node-fetch');
+
+  const randomSubreddits = ['hentai', 'AnimeMILFS', 'ecchi', 'thick_hentai'];
+
+module.exports = {
+  name: 'hentai',
+  description: 'Shows a random hentai image/gif.',
+  usage: 'hentai',
+  aliases: [],
+  category: 'nsfw',
+  permissions: [],
+  async execute(message, args, bot) {
+    if (!message.channel.nsfw)
+      return message.channel.send(bot.tools.notNSFWChannel(message, this.name));
+
+      const randomSubreddit = randomSubreddits[Math.floor(Math.random() * 4)],
+      posts = await fetchNode(
+        `https://www.reddit.com/r/${randomSubreddit}.json?sort=top&t=week`
+      )
+      .then((res) => res.json())
+      .then((json) => json.data.children.filter((post) => post.data.url))
+      .catch(() => null);
+
+    if (!posts?.length)
+      return message.channel.send(
+        "The hentai subreddits didn't return any hentai posts, try again later."
+      );
+
+    const {
+      data: { title, url, author, ups, num_comments },
+    } = posts[Math.floor(Math.random() * posts.length)];
+
+    return message.channel.send(
+      new MessageEmbed()
+      .setColor('RANDOM')
+      .setTitle('Random hentai')
+      .setDescription(
+        `**[${title}](${url})**\nPosted by **${Util.escapeMarkdown(author)}**`
+      )
+      .setImage(url)
+      .addField(
+        'Upvotes and comments',
+        `<:RedditUpvote:792581199670411344> **${ups.toLocaleString()}** • <:RedditComment:792581357901578241> **${num_comments.toLocaleString()}**`,
+        false
+      )
+    );
+  }
+};

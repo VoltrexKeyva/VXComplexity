@@ -1,0 +1,114 @@
+const { MessageEmbed } = require('discord.js');
+
+module.exports = {
+  name: 'reload',
+  description: 'Reloads commands/categories.',
+  usage: 'reload <...command names>',
+  aliases: [],
+  category: 'owner',
+  permissions: [],
+  async execute(message, args, bot) {
+    if (!bot.ownerids.includes(message.author.id))
+      return message.channel.send(
+        bot.tools.notOwnerEmbed(message)
+      );
+    
+    if (!args[0])
+      return message.channel.send(
+        bot.tools.invalidArguments(message, this.usage)
+      );
+
+    const toReload = args.includes('all')
+      ? bot.commands.array()
+      : args.map((arg) => {
+          const lower = arg.toLowerCase();
+
+          return bot.commands.get(lower) || bot.aliases.get(lower) || lower;
+        });
+
+    if (!toReload.some(({ name }) => !!name))
+      return message.channel.send(
+        'None of the provided command names were valid.'
+      );
+
+    const reloaded = [],
+      failed = [];
+
+    for (let command of toReload) {
+      if (!command.name) {
+        failed.push({
+          name: command,
+          error: 'Not found'
+        });
+
+        continue;
+      }
+
+      const { name, aliases } = command,
+        path = `./${name}`;
+
+      try {
+        delete require.cache[require.resolve(path)];
+
+        command = require(path);
+
+        bot.commands.delete(name);
+
+        bot.commands.set(command.name, command);
+
+        if (aliases.length) {
+          for (const alias of aliases) {
+            bot.aliases.delete(alias);
+
+            if (!command.aliases.includes(alias)) continue;
+
+            bot.aliases.set(alias, command);
+          }
+        }
+
+        reloaded.push(command.name);
+      } catch (error) {
+        failed.push({ name, error });
+      }
+    }
+
+    const reloadEmbeds = [];
+
+    const reloadedEmbeds = bot.tools.chunkArray(reloaded, 15).map((chunk, i) =>
+      new MessageEmbed()
+        .setColor('#0033ff')
+        .setTitle(`Reloaded commands | Page ${i + 1}`)
+        .setDescription(
+          chunk.map((c, idx) => `**${idx + 1}-** ${c}`).join('\n')
+        )
+    );
+
+    reloadEmbeds.push(...reloadedEmbeds);
+
+    if (failed.length) {
+      const failedEmbeds = bot.tools.chunkArray(failed, 5).map((chunk, i) =>
+        new MessageEmbed()
+          .setColor('#ff0000')
+          .setTitle(`Failed to reload | Page ${i + 1}`)
+          .setDescription(
+            chunk
+              .map(
+                ({ name, error }, idx) =>
+                  `**${
+                    idx + 1
+                  }-** ${name}\n|_ Error:\n\`\`\`js\n${error}\n\`\`\``
+              )
+              .join('\n')
+          )
+      );
+
+      reloadEmbeds.push(...failedEmbeds);
+    }
+
+    return bot.tools.paginate(message, {
+      type: 'embed',
+      messages: reloadEmbeds,
+      time: 300000
+    });
+  }
+};

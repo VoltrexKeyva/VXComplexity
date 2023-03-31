@@ -1,0 +1,41 @@
+const {
+  Permissions: {
+    FLAGS: { MANAGE_MESSAGES }
+  }
+} = require('discord.js');
+
+module.exports = {
+  name: 'purge',
+  description:
+    'Deletes the amount of messages given in a text channel, (max: 100)',
+  usage: 'purge <1-100>',
+  aliases: ['clear'],
+  category: 'general',
+  permissions: [
+    {
+      bitfield: MANAGE_MESSAGES,
+      bot: true
+    }
+  ],
+  async execute(message, args, bot) {
+    const num = Number(args[0]);
+
+    if (!args[0] || !Number.isInteger(num) || num < 1 || num > 100)
+      return message.channel.send(
+        bot.tools.invalidArguments(message, this.usage)
+      );
+
+    await message.delete();
+
+    await message.channel.bulkDelete(num, true);
+
+    const success = await message.channel.send(
+      `Successfully purged **${num}** messages.`
+    );
+
+    return setTimeout(
+      async () => (!success.deleted ? await success.delete() : null),
+      3000
+    );
+  }
+};

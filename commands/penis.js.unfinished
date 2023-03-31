@@ -1,0 +1,18 @@
+const { MessageEmbed } = require('discord.js');
+
+module.exports = {
+  name: 'penis',
+  description: "Measures a user's pp.",
+  usage: 'penis [user]',
+  aliases: ['pp'],
+  category: 'fun',
+  permissions: [],
+  async execute(message, args, bot) {
+    return message.channel.send(
+      new MessageEmbed()
+      .setColor('#0033ff')
+      .setTitle(`PP size of the ${bot.tools.parseUser(message, args).tag}`)
+      .setDescription(`8${'='.repeat(Math.floor(Math.random() * 11))}D`)
+    );
+  }
+};

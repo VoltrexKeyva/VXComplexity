@@ -1,0 +1,45 @@
+const { workPlaceholders } = require('../constants');
+
+module.exports = {
+  name: 'work',
+  description: 'Get up and work, earn yourself some coins.',
+  usage: 'work',
+  aliases: [],
+  category: 'economy',
+  cooldown: 3600000,
+  permissions: [],
+  async execute(message, args, bot) {
+    const coins =
+        (
+          await bot.db.collection('coins').findOne({
+            'details.id': message.author.id,
+          })
+        )?.details.coins ?? null,
+      gained = Math.floor(Math.random() * 800);
+
+    if (!coins)
+      await bot.db.collection('coins').insertOne({
+        details: {
+          id: message.author.id,
+          coins: gained
+        }
+      });
+    else
+      await bot.db.collection('coins').findOneAndUpdate(
+        {
+          'details.id': message.author.id
+        },
+        {
+          $inc: {
+            'details.coins': gained
+          }
+        }
+      );
+
+    return message.channel.send(
+      `${gained > 500 ? '💰' : '💵'} ${
+        workPlaceholders[Math.floor(Math.random() * workPlaceholders.length)]
+      } **${gained.toLocaleString()}** coins!`
+    );
+  }
+};

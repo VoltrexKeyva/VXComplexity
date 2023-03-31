@@ -1,0 +1,70 @@
+const {
+  Permissions: {
+    FLAGS: { ATTACH_FILES }
+  }
+} = require('discord.js'),
+  puppeteer = require('puppeteer');
+
+module.exports = {
+  name: 'screenshot',
+  description: 'Screenshots a given website.',
+  usage: 'screenshot <website>',
+  aliases: ['ss'],
+  category: 'fun',
+  permissions: [
+    {
+      bitfield: ATTACH_FILES,
+      onlyBot: true
+    }
+  ],
+  async execute(message, args, bot) {
+    if (!message.channel.nsfw)
+      return message.channel.send(bot.tools.notNSFWChannel(message, this.name));
+
+    if (!args[0])
+      return message.channel.send(
+        bot.tools.invalidArguments(message, this.usage)
+      );
+
+    const browser = await puppeteer
+      .launch({
+        executablePath: '/usr/bin/chromium-browser',
+        args: ['--no-sandbox', '--disable-extensions'],
+        defaultViewport: {
+          width: 1440,
+          height: 1080
+        }
+      })
+      .catch(() => null);
+
+    if (!browser)
+      return message.channel.send(
+        'Failed to launch puppeteer, please try again later.'
+      );
+
+    const page = await browser.newPage();
+
+    await page.setUserAgent(
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3738.0 Safari/537.36'
+    );
+
+    const t = await page.goto(args[0])
+    .catch(() => page.goto(`http://${args[0]}`)
+      .catch(() => page.goto(`https://${args[0]}`)
+        .catch(() => null)));
+    
+    if (!t) return message.channel.send(
+            "Failed to resolve domain or couldn't connect."
+          );
+
+    const screenshot = await page.screenshot({
+      type: 'png'
+    });
+
+    await browser.close();
+
+    return message.channel.send({
+      files: [screenshot]
+    });
+  }
+};

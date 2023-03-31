@@ -1,0 +1,73 @@
+const { MessageEmbed, Util } = require('discord.js'),
+  fetchNode = require('node-fetch');
+
+module.exports = {
+  name: 'repositories',
+  description: 'Shows repositories of a github user.',
+  usage: 'repositories <github user username>',
+  aliases: ['repos'],
+  category: 'general',
+  permissions: [],
+  async execute(message, args, bot) {
+    if (!args[0])
+      return message.channel.send(
+        bot.tools.invalidArguments(message, this.usage)
+      );
+
+    const encoded = encodeURIComponent(args.join(' '));
+
+    let repos = await fetchNode(`https://api.github.com/users/${encoded}/repos`)
+      .then((res) => res.json())
+      .catch(() => null);
+
+    if (repos?.message?.toLowerCase() === 'not found')
+      return message.channel.send('User not found.');
+
+    const githubUser =
+      repos[0]?.owner ||
+      (await fetchNode(`https://api.github.com/users/${encoded}`).then((res) =>
+        res.json()
+      ));
+
+    repos = bot.tools.chunkArray(
+      repos.map(
+        ({ name, owner: { login }, stargazers_count, fork }, i) =>
+        `${
+            i + 1
+          }- **[${name}](https://github.com/${login}/${name})** (⭐ ${stargazers_count.toLocaleString()}) ${
+            fork ? '**[Fork]**' : ''
+          }`
+      ),
+      10
+    );
+
+    const reposEmbeds = [];
+    if (repos.length)
+      for (const repoList of repos)
+        reposEmbeds.push(
+          new MessageEmbed()
+          .setColor('#0033ff')
+          .setAuthor(
+            `${Util.escapeMarkdown(githubUser.login)}'s repositories`,
+            githubUser.avatar_url
+          )
+          .setDescription(repoList.join('\n'))
+        );
+
+    return bot.tools.paginate(message, {
+      type: 'embed',
+      messages: reposEmbeds[0] ?
+        reposEmbeds :
+        [
+            new MessageEmbed()
+              .setColor('#0033ff')
+              .setAuthor(
+            `${Util.escapeMarkdown(githubUser.login)}'s repositories`,
+            githubUser.avatar_url
+          )
+              .setDescription('This user has no repositories.')
+          ],
+      time: 180000
+    });
+  }
+};

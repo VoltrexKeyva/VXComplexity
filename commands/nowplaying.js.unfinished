@@ -1,0 +1,83 @@
+const { MessageEmbed, Util } = require('discord.js'),
+  parseMs = require('parse-ms'),
+  ms = require('ms'),
+  stringToolkit = require('string-toolkit');
+
+module.exports = {
+  name: 'nowplaying',
+  description: "Shows the current song/video that's being played.",
+  usage: 'nowplaying',
+  aliases: ['np'],
+  category: 'music',
+  permissions: [],
+  async execute(message, args, bot) {
+    const queue = bot.queue,
+      guildQueue = queue.get(message.guild.id);
+
+    if (!guildQueue) return message.channel.send("I'm not playing anything.");
+
+    const {
+      timestamp,
+      title,
+      url,
+      author,
+      looping,
+      requester,
+      thumbnail
+    } = guildQueue.songs[0],
+      isLive = timestamp.startsWith('Live'),
+      elapsed = !isLive ?
+      Object.entries(
+        parseMs(guildQueue.connection.dispatcher.streamTime + 1000)
+      )
+      .filter(([K, V]) => K !== 'milliseconds' && V > 0)
+      .map(([, V]) => V.toString()) :
+      null,
+      dateIdentifiers = {
+        0: 's',
+        1: 'm',
+        2: 'h',
+        3: 'd',
+        4: 'w',
+        5: 'month',
+        6: 'y',
+      },
+      nowPlayingEmbed = new MessageEmbed()
+      .setColor('#0033ff')
+      .setTitle('Now playing')
+      .setDescription(`**[${title}](${url})**`)
+      .addField('Author', Util.escapeMarkdown(author), false)
+      .addField(
+        'Duration',
+        isLive ?
+        'Live Stream [Unknown]' :
+        `${
+                elapsed.length === 1
+                  ? `00:${elapsed[0].length === 1 ? '0' : ''}${elapsed[0]}`
+                  : elapsed
+                      .map((time) => (time.length === 1 ? `0${time}` : time))
+                      .join(':')
+              } [${stringToolkit.createProgressBar(
+                guildQueue.connection.dispatcher.streamTime + 1000,
+                timestamp
+                  .split(':')
+                  .reverse()
+                  .reduce((T, O, i) => T + ms(`${O}${dateIdentifiers[i]}`), 0),
+                {
+                  barLength: 25
+                }
+              )}] ${timestamp}`,
+        false
+      )
+      .addField('Looped', looping ? 'Yes' : 'No', true)
+      .addField(
+        'Track requested by',
+        `**${Util.escapeMarkdown(requester.tag)}** [${requester}]`,
+        false
+      );
+
+    if (message.channel.nsfw) nowPlayingEmbed.setThumbnail(thumbnail);
+
+    return message.channel.send(nowPlayingEmbed);
+  }
+};

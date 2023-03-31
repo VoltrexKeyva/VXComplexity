@@ -1,0 +1,51 @@
+const {
+    Permissions: {
+      FLAGS: { ATTACH_FILES }
+    }
+  } = require('discord.js'),
+  fetchNode = require('node-fetch'),
+  { alexflipnoteToken } = require('../config.json');
+
+module.exports = {
+  name: 'magik',
+  description: 'Shows magikated version of an image.',
+  usage: 'magik [user|image|URL|unicode emoji|custom emoji]',
+  aliases: [],
+  category: 'fun',
+  permissions: [
+    {
+      bitfield: ATTACH_FILES,
+      onlyBot: true
+    }
+  ],
+  async execute(message, args, bot) {
+    const { title, url } = bot.tools.parseURL(
+        message,
+        args,
+        'Magikated version',
+        false
+      ),
+      buffer = await fetchNode(
+        `https://api.alexflipnote.dev/filter/magik?image=${url}`,
+        {
+          headers: {
+            Authorization: alexflipnoteToken
+          }
+        }
+      ).then((res) => res.buffer());
+
+    if (Buffer.byteLength(buffer) / (2 ** 1024) > 8)
+      return message.channel.send(
+        "The output file size is higher than 8MB which i can't send."
+      );
+
+    return message.channel.send(title, {
+      files: [
+        {
+          attachment: buffer,
+          name: 'Magik.png'
+        }
+      ]
+    });
+  }
+};

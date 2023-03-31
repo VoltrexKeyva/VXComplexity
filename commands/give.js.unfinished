@@ -1,0 +1,104 @@
+const { Util } = require('discord.js');
+
+module.exports = {
+  name: 'give',
+  description: 'Gives coins a user.',
+  usage: 'give <amount> | <user>',
+  aliases: [],
+  category: 'economy',
+  permissions: [],
+  async execute(message, args, bot) {
+    const { user, seperatedContent } = bot.tools.parseUser(message, args, {
+        seperate: true,
+        fallbackToAuthor: false
+      }),
+      invalidArguments = bot.tools.invalidArguments(message, this.usage);
+
+    if (!user) return message.channel.send(invalidArguments);
+
+    if (user.id === message.author.id)
+      return message.channel.send(
+        'Why are you trying to share coins with yourself?'
+      );
+
+    if (user.bot)
+      return message.channel.send('Why are you sharing coins to bots?');
+
+    const localeMatch = seperatedContent.match(/^((\d{3}),?)+$/),
+      kMatch = seperatedContent.match(/^(\d+)(k|K)$/),
+      isNumber = Number.isInteger(Number(seperatedContent));
+
+    if (!(localeMatch || kMatch || isNumber))
+      return message.channel.send(invalidArguments);
+
+    const amount = localeMatch
+        ? Number(seperatedContent.replace(/,/g, ''))
+        : kMatch
+        ? Number(`${seperatedContent.slice(0, -1)}000`)
+        : isNumber
+        ? Number(seperatedContent)
+        : 0,
+      getCoins =
+        (
+          await bot.db.collection('coins').findOne({
+            'details.id': message.author.id
+          })
+        )?.details.coins || 0;
+
+    if (amount < 1)
+      return message.channel.send(
+        'What are you trying to share? some air? at least share 1 coin.'
+      );
+    else if (amount > getCoins)
+      return message.channel.send(
+        `You don't have **${amount.toLocaleString()}** coins to share, you currently have **${getCoins.toLocaleString()}** coins.`
+      );
+
+    if (amount > 100000)
+      return message.channel.send(
+        "You can't share more than 100k coins at once."
+      );
+
+    if (
+      !(await bot.db.collection('coins').findOne({
+        'details.id': user.id
+      }))
+    )
+      await bot.db.collection('coins').insertOne({
+        details: {
+          id: user.id,
+          coins: amount
+        }
+      });
+    else
+      await bot.db.collection('coins').findOneAndUpdate(
+        {
+          'details.id': user.id
+        },
+        {
+          $inc: {
+            'details.coins': amount
+          }
+        }
+      );
+
+    await bot.db.collection('coins').findOneAndUpdate(
+      {
+        'details.id': message.author.id
+      },
+      {
+        $inc: {
+          'details.coins': -amount
+        }
+      }
+    );
+
+    return message.channel.send(
+      `**${Util.escapeMarkdown(
+        message.author.tag
+      )}** gave **${amount.toLocaleString()}** coin${
+        amount === 1 ? '' : 's'
+      } to **${Util.escapeMarkdown(user.tag)}**!`
+    );
+  }
+};

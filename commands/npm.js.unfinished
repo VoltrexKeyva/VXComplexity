@@ -1,0 +1,201 @@
+const { MessageEmbed, Util } = require('discord.js'),
+  fetchNode = require('node-fetch'),
+  moment = require('moment'),
+  cheerio = require('cheerio');
+
+module.exports = {
+  name: 'npm',
+  description: 'Search through the npm registry.',
+  usage: 'npm <package name>',
+  aliases: [],
+  category: 'general',
+  permissions: [],
+  async execute(message, args, bot) {
+    if (!args[0])
+      return message.channel.send(
+        bot.tools.invalidArguments(message, this.usage)
+      );
+
+    const package = await fetchNode(
+      `https://registry.npmjs.org/${encodeURIComponent(args.join(' '))}`
+    )
+      .then((res) => res.json())
+      .catch(() => null);
+
+    if (!package || package.error)
+      return message.channel.send('No package found.');
+
+    const distTags = package['dist-tags'];
+
+    if (!distTags) return message.channel.send('Unpublished package.');
+
+    const {
+        name,
+        version,
+        keywords,
+        main,
+        author,
+        description,
+        bugs,
+        homepage,
+        dist: { tarball, fileCount },
+        _nodeVersion,
+        _npmVersion,
+        maintainers
+      } = package.versions[distTags.latest],
+      npmBaseURL = `https://npmjs.com/package/${encodeURIComponent(name)}`,
+      weeklyDownloads = await fetchNode(npmBaseURL)
+        .then((res) => res.text())
+        .then((text) =>
+          cheerio
+            .load(text)(
+              'p[class="_9ba9a726 f4 tl flex-auto fw6 black-80 ma0 pr2 pb1"]'
+            )
+            .html()
+        ),
+      npmLogo =
+        'https://img.stackshare.io/service/1120/lejvzrnlpb308aftn31u.png',
+      npmEmbeds = [];
+
+    let { dependencies } = package.versions[distTags.latest];
+
+    const mainInfoEmbed = new MessageEmbed()
+      .setColor('#ff0000')
+      .setAuthor('NPM package information', npmLogo)
+      .addField('Name', `**[${name}](${npmBaseURL})**`, false)
+      .addField('Version', Util.escapeMarkdown(version), true);
+
+    if (keywords?.length)
+      mainInfoEmbed.addField(
+        'Keywords',
+        Util.escapeMarkdown(keywords.join(', ')),
+        false
+      );
+
+    if (main)
+      mainInfoEmbed.addField(
+        'Main file/directory',
+        Util.escapeMarkdown(main),
+        false
+      );
+
+    if (weeklyDownloads)
+      mainInfoEmbed.addField('Weekly downloads', weeklyDownloads, true);
+
+    const created = moment.utc(package.time.created),
+      updated = moment.utc(package.time[version]);
+
+    mainInfoEmbed
+      .addField(
+        'Created at',
+        `${created.format(
+          'ddd, MMM Do, YYYY h:mm:ss a'
+        )} (${created.fromNow()})`,
+        false
+      )
+      .addField(
+        'Updated at',
+        `${updated.format(
+          'ddd, MMM Do, YYYY h:mm:ss a'
+        )} (${updated.fromNow()})`,
+        false
+      );
+
+    if (author)
+      mainInfoEmbed.addField(
+        'Author',
+        `${Util.escapeMarkdown(author.name || '')}${Util.escapeMarkdown(
+          author.email ? ` (${author.email})` : ''
+        )}`,
+        false
+      );
+
+    if (description) mainInfoEmbed.setDescription(description);
+
+    const additionalInfoEmbed =
+      [bugs?.url, homepage, tarball].some((link) => !!link) ||
+      _nodeVersion ||
+      _npmVersion ||
+      fileCount ||
+      maintainers.length
+        ? new MessageEmbed()
+            .setColor('#ff0000')
+            .setAuthor('Additional information', npmLogo)
+        : null;
+
+    if (additionalInfoEmbed) {
+      if (_nodeVersion)
+        additionalInfoEmbed.addField('Node version', _nodeVersion, true);
+
+      if (_npmVersion)
+        additionalInfoEmbed.addField('NPM version', _npmVersion, true);
+
+      if (fileCount)
+        additionalInfoEmbed.addField(
+          'File count',
+          fileCount.toLocaleString(),
+          true
+        );
+
+      const links = [];
+
+      if (bugs?.url) links.push(`[Bugs](${bugs.url})`);
+
+      if (homepage) links.push(`[Homepage](${homepage})`);
+
+      if (tarball) links.push(`[Tarball](${tarball})`);
+
+      if (links.length)
+        additionalInfoEmbed.addField('Links', links.join(' • '), false);
+
+      if (maintainers.length)
+        additionalInfoEmbed.addField(
+          `Maintainer${maintainers.length === 1 ? '' : 's'}`,
+          `${Util.escapeMarkdown(
+            maintainers
+              .slice(0, 30)
+              .map((maintainer) => maintainer.name)
+              .join(' | ')
+          )}${
+            maintainers.length > 30
+              ? ` and **${maintainers.length - 30}** more maintainers.`
+              : ''
+          }`,
+          false
+        );
+    }
+
+    let dependencyEmbeds;
+
+    if (dependencies) {
+      dependencyEmbeds = [];
+
+      dependencies = bot.tools.chunkArray(
+        Object.entries(dependencies).map(
+          ([K, V]) => `\`${Util.escapeMarkdown(K)} (${V})\``
+        ),
+        30
+      );
+
+      for (let i = 0; i < dependencies.length; i++)
+        dependencyEmbeds.push(
+          new MessageEmbed()
+            .setColor('#ff0000')
+            .setAuthor(`Dependencies - Page ${i + 1}`, npmLogo)
+            .setDescription(dependencies[i].join(' | '))
+        );
+    }
+
+    npmEmbeds.push(
+      ...[mainInfoEmbed, additionalInfoEmbed, dependencyEmbeds]
+        .filter((e) => !!e)
+        .flat()
+    );
+
+    return bot.tools.paginate(message, {
+      type: 'embed',
+      messages: npmEmbeds,
+      time: 180000
+    });
+  }
+};

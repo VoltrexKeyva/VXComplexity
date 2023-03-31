@@ -1,0 +1,28 @@
+const { MessageEmbed } = require('discord.js');
+
+module.exports = {
+  name: 'links',
+  description:
+    "Shows links that redirects you to vote for the bot, join it's support server or invite the bot.",
+  usage: 'links',
+  aliases: ['vote', 'support', 'invite'],
+  category: 'general',
+  permissions: [],
+  async execute(message, args, bot) {
+    return message.channel.send(
+      new MessageEmbed()
+        .setColor('#0033ff')
+        .setAuthor(
+          'Links',
+          bot.user.displayAvatarURL({
+            dynamic: true,
+            size: 1024,
+            format: 'png'
+          })
+        )
+        .setDescription(
+          `[Invite](https://discord.com/oauth2/authorize?client_id=${bot.user.id}&scope=bot&permissions=0) • [Support](https://discord.gg/8uuJwPZ) • [Vote](https://top.gg/bot/${bot.user.id}/vote)`
+        )
+    );
+  }
+};

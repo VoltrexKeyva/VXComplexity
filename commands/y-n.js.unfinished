@@ -1,0 +1,15 @@
+const options = ['Yes', 'No'];
+
+module.exports = {
+  name: 'y-n',
+  description: 'Just says yes or no.',
+  usage: 'y-n',
+  aliases: [],
+  category: 'fun',
+  permissions: [],
+  async execute(message, args, bot) {
+    return message.channel.send(
+      options[Math.floor(Math.random() * 2)]
+    );
+  }
+};

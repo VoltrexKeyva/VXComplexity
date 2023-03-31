@@ -1,0 +1,57 @@
+const {
+  MessageEmbed,
+  Permissions: {
+    FLAGS: { BAN_MEMBERS }
+  },
+  Util
+} = require('discord.js');
+
+module.exports = {
+  name: 'unban',
+  description: 'Unbans a user from the server.',
+  usage: 'unban <user ID>',
+  aliases: [],
+  category: 'moderation',
+  permissions: [
+    {
+      bitfield: BAN_MEMBERS,
+      bot: true
+    }
+  ],
+  async execute(message, args, bot) {
+    if (!args[0])
+      return message.channel.send(
+        bot.tools.invalidArguments(message, this.usage)
+      );
+
+    if (args[0] === message.author.id)
+      return message.channel.send(
+        "How am i supposed to unban you when you're not banned?"
+      );
+
+    if (!(await message.guild.fetchBans()).has(args[0]))
+      return message.channel.send(
+        "How am i supposed to unban a user who's not banned?"
+      );
+
+    const user = await bot.users.fetch(args[0]);
+
+    await message.guild.members.unban(args[0]);
+
+    return message.channel.send(
+      new MessageEmbed()
+      .setColor('#0033ff')
+      .setAuthor(
+        'Unbanned!',
+        user.displayAvatarURL({
+          dynamic: true,
+          size: 1024,
+          format: 'png'
+        })
+      )
+      .setDescription(
+        `Successfully unbanned **${Util.escapeMarkdown(user.tag)}**`
+      )
+    );
+  }
+};

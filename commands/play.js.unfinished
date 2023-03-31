@@ -1,0 +1,382 @@
+const { MessageEmbed, Util } = require('discord.js'),
+  ytdl = require('ytdl-core');
+
+const { supportedFormats } = require('../constants');
+
+async function playTrack(id, track) {
+  const queueCheck = queue.get(id);
+
+  if (!track) {
+    await queueCheck.TextC.send(
+      new MessageEmbed()
+        .setColor('#0033ff')
+        .setTitle('Queue finished')
+        .setDescription('Left voice channel due to empty queue.')
+    );
+
+    queueCheck.playing = false;
+
+    await queueCheck.VoiceC.leave();
+
+    queue.delete(id);
+
+    return;
+  }
+
+  if (!track.looping) {
+    const startedPlayingEmbed = new MessageEmbed()
+      .setColor('#0033ff')
+      .setTitle('Started playing')
+      .setDescription(
+        `**[${track.title}](${track.url})** (${track.timestamp})`
+      )
+      .setFooter(
+        `Requested by ${track.requester.tag}`,
+        track.requester.displayAvatarURL({
+          dynamic: true,
+          size: 1024,
+          format: 'png',
+        })
+      );
+
+    if (queueCheck.TextC.nsfw)
+      startedPlayingEmbed.setThumbnail(track.thumbnail);
+
+    await queueCheck.TextC.send(startedPlayingEmbed);
+  }
+
+  queueCheck.connection.play(
+    track.type === 'youtube'
+      ? ytdl(track.url, {
+          filter: 'audioonly',
+          quailty: 'highestaudio',
+          depth: 0
+        })
+      : track.url
+  );
+
+  queueCheck.connection.dispatcher.on('error', async () => {
+    await queueCheck.TextC.send(
+      'An error happened while playing this track, skipping to the next song.'
+    );
+
+    queueCheck.songs.shift();
+
+    return playTrack(id, queueCheck.songs[0]);
+  });
+
+  queueCheck.connection.dispatcher.on('finish', async () => {
+    if (track.looping) return playTrack(id, track);
+
+    queueCheck.songs.shift();
+
+    return playTrack(id, queueCheck.songs[0]);
+  });
+}
+
+module.exports = {
+  name: 'play',
+  description: 'Plays a song/video from YouTube.',
+  usage: 'play <name|URL|attachment>',
+  aliases: ['p'],
+  category: 'music',
+  permissions: [],
+  async execute(message, args, bot) {
+    const youtube = bot.tools.youtube,
+      queue = bot.queue,
+      myVC = message.guild.me.voice.channel;
+
+    if (myVC && !myVC.members.has(message.author.id))
+      return message.channel.send(
+        `You have to be in the same voice channel as me to use this command. (\`${Util.escapeMarkdown(
+          myVC.name
+        )}\`)`
+      );
+
+    if (!message.member.voice.channel)
+      return message.channel.send(
+        'You have to be in a voice channel to use this command.'
+      );
+
+    const myPerms = message.member.voice.channel.permissionsFor(bot.user.id);
+
+    if (!['CONNECT', 'SPEAK'].every((p) => myPerms.has(p)))
+      return message.channel.send(
+        'I must have both of the `Connect` and `Speak` permissions in your voice channel to play something.'
+      );
+
+    let song;
+
+    const attachment = message.attachments.first(),
+      joined = args.join(' '),
+      baseURL = 'https://youtube.com/watch?v=',
+      liveBaseURL = 'https://youtub.be/',
+      resolveTimestamp = (T) => {
+        const duration = Object.entries(T)
+          .filter(([K, V]) => K !== 'milliseconds' && V > 0)
+          .map(([, V]) => (V.toString().length === 1 ? `0${V}` : V));
+
+        if (duration.length === 1) duration.unshift('00');
+
+        return duration.join(':') || 'Live stream [Unknown]';
+      };
+
+    if (
+      attachment &&
+      supportedFormats.some((e) => attachment.url.endsWith(e))
+    ) {
+      song = {
+        title: attachment.name || 'Attachment name unknown',
+        url: attachment.url,
+        thumbnail:
+          'https://www.pinclipart.com/picdir/middle/41-414384_eps-to-png-converter-free-download-file-icon.png',
+        author: `attachment by ${Util.escapeMarkdown(message.author.tag)}`,
+        timestamp: 'Attachment file [Unknown]',
+        requester: message.author,
+        looping: false,
+        type: 'attachment'
+      };
+    } else if (
+      /^https?:\/\/(www\.)?(youtu\.be\/|youtube\.com\/watch\?v=)(.{11})$/.test(
+        joined
+      )
+    ) {
+      const video = await youtube.getVideo(joined).catch(() => null);
+
+      if (!video) return message.channel.send('Invalid URL.');
+
+      song = {
+        title: video.title,
+        url: `${
+          video.raw.snippet.liveBroadcastContent === 'live'
+            ? liveBaseURL
+            : baseURL
+        }${video.id}`,
+        thumbnail: video.thumbnails.high.url,
+        author: video.channel.title,
+        timestamp: resolveTimestamp(video.duration),
+        requester: message.author,
+        looping: false,
+        type: 'youtube'
+      };
+    } else if (
+      /^https?:\/\/(www\.)?(youtu\.be|youtube\.com)\/playlist\?list=(.*)$/.test(
+        joined
+      )
+    ) {
+      const playlist = await youtube.getPlaylist(joined).catch(() => null);
+
+      if (!playlist) return message.channel.send('Invalid URL.');
+
+      const loading = await message.channel.send(
+          new MessageEmbed()
+            .setColor('#0033ff')
+            .setTitle('Loading')
+            .setDescription(
+              `Loading all tracks from **[${playlist.title}](${joined})** playlist...`
+            )
+        ),
+        videos = await playlist.getVideos();
+
+      let loaded = 0,
+        failed = 0;
+
+      song = [];
+
+      for (const video of videos) {
+        const getVideo = await youtube
+          .getVideo(`${baseURL}${video.id}`)
+          .catch(() => null);
+
+        if (!getVideo) {
+          failed++;
+          continue;
+        }
+
+        song.push({
+          title: getVideo.title,
+          url: `${
+            getVideo.raw.snippet.liveBroadcastContent === 'live'
+              ? liveBaseURL
+              : baseURL
+          }${getVideo.id}`,
+          thumbnail: getVideo.thumbnails.high.url,
+          author: getVideo.channel.title,
+          timestamp: resolveTimestamp(getVideo.duration),
+          requester: message.author,
+          looping: false,
+          type: 'youtube'
+        });
+
+        loaded++;
+      }
+
+      if (loaded === 0)
+        return message.channel.send(
+          new MessageEmbed()
+            .setColor('#0033ff')
+            .setTitle('Failed')
+            .setDescription(
+              `Wasn't able to load any of the tracks found in the **[${playlist.title}](${joined})** playlist.`
+            )
+        );
+
+      if (!loading.deleted) await loading.delete();
+
+      await message.channel.send(
+        new MessageEmbed()
+          .setColor('#0033ff')
+          .setTitle('Loaded')
+          .setDescription(
+            `**${loaded.toLocaleString()}** track${
+              loaded === 1 ? '' : 's'
+            } loaded from the **[${playlist.title}](${joined})** playlist. ${
+              failed > 0
+                ? `(**${failed.toLocaleString()}** track${
+                    failed === 1 ? '' : 's'
+                  } failed to load)`
+                : ''
+            }`
+          )
+      );
+    } else if (args[0]) {
+      const videos = await youtube.search(joined, 55).catch(() => null);
+
+      if (!videos?.length)
+        return message.channel.send(
+          'No tracks found matching the provided argument.'
+        );
+
+      const tracks = videos.filter(({ title }) => title).slice(0, 10),
+        selection = await message.channel.send(
+          new MessageEmbed()
+            .setColor('#0033ff')
+            .setTitle('Track selection')
+            .setDescription(
+              tracks
+                .map(
+                  ({ title, id }, i) =>
+                    `**${i + 1}- [${title.replace(/&#\d+;/g, (s) =>
+                      String.fromCharCode(s.match(/&#(\d+);/)[1])
+                    )}](${baseURL}${id})**`
+                )
+                .join('\n')
+            )
+            .addField(
+              'Note',
+              `You must send a number between **1-${tracks.length}** to choose the track you want me to play before 15 seconds`
+            )
+        ),
+        response = await message.channel
+          .awaitMessages(
+            ({ author: { id }, content }) => {
+              const num = Number(content);
+
+              return (
+                id === message.author.id &&
+                /^\d+$/.test(content) &&
+                num > 0 &&
+                num <= tracks.length
+              );
+            },
+            {
+              max: 1,
+              time: 15000,
+              errors: ['time']
+            }
+          )
+          .then((collected) => Number(collected.first().content))
+          .catch(() => null);
+
+      if (!selection.deleted) await selection.delete();
+
+      if (!response)
+        return message.channel.send(
+          new MessageEmbed()
+            .setColor('#0033ff')
+            .setTitle("Time's up")
+            .setDescription("You didn't choose a track in 15 seconds.")
+        );
+
+      const track = await youtube.getVideo(
+        `${baseURL}${videos[response - 1].id}`
+      );
+
+      song = {
+        title: track.title,
+        url: `${
+          track.raw.snippet.liveBroadcastContent === 'live'
+            ? liveBaseURL
+            : baseURL
+        }${track.id}`,
+        thumbnail: track.thumbnails.high.url,
+        author: track.channel.title,
+        timestamp: resolveTimestamp(track.duration),
+        requester: message.author,
+        looping: false,
+        type: 'youtube'
+      };
+    } else {
+      return message.channel.send(
+        bot.tools.invalidArguments(message, this.usage)
+      );
+    }
+
+    let guildQueue;
+    if (!queue.has(message.guild.id)) {
+      guildQueue = queue
+        .set(message.guild.id, {
+          TextC: message.channel,
+          VoiceC: message.member.voice.channel,
+          songs: Array.isArray(song) ? song : [song],
+          connection: null,
+          playing: null
+        })
+        .get(message.guild.id);
+    } else {
+      guildQueue = queue.get(message.guild.id);
+
+      if (Array.isArray(song)) guildQueue.songs.push(...song);
+      else guildQueue.songs.push(song);
+    }
+
+    if (guildQueue.playing && !Array.isArray(song)) {
+      const queuedEmbed = new MessageEmbed()
+        .setColor('#0033ff')
+        .setTitle('Queued')
+        .setDescription(
+          `Successfully queued **[${song.title}](${
+            song.url
+          })** on position **#${(
+            guildQueue.songs.length - 1
+          ).toLocaleString()}**.`
+        )
+        .setFooter(
+          `Requested by ${message.author.tag}`,
+          message.author.displayAvatarURL({
+            dynamic: true,
+            size: 1024,
+            format: 'png',
+          })
+        );
+
+      if (message.channel.nsfw) queuedEmbed.setThumbnail(song.thumbnail);
+
+      await message.channel.send(queuedEmbed);
+    }
+
+    if (!guildQueue.playing) {
+      try {
+        guildQueue.playing = true;
+
+        guildQueue.connection = await message.member.voice.channel.join();
+
+        return playTrack(message.guild.id, guildQueue.songs[0]);
+      } catch {
+        guildQueue.delete(message.guild.id);
+
+        return message.channel.send('There seems like something went wrong.');
+      }
+    }
+  }
+};

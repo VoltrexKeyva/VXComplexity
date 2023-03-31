@@ -1,0 +1,61 @@
+const { MessageEmbed } = require('discord.js');
+const { randomCodes } = require('../constants');
+
+module.exports = {
+  name: 'codequiz',
+  description: 'Shows a random codequiz to complete.',
+  usage: 'codequiz',
+  aliases: ['cq'],
+  category: 'fun',
+  permissions: [],
+  async execute(message, args, bot) {
+    const { question, answer } = randomCodes[
+      Math.floor(Math.random() * randomCodes.length)
+    ];
+
+    await message.channel.send(
+      new MessageEmbed()
+        .setColor('#f0db4f')
+        .setTitle('A wild JavaScript quiz appeared!')
+        .setThumbnail(
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/9/99/Unofficial_JavaScript_logo_2.svg/600px-Unofficial_JavaScript_logo_2.svg.png'
+        )
+        .addField('Question', `\`\`\`js\n${question}\`\`\``, false)
+        .addField(
+          'Note',
+          'Someone must answer this question in 30 seconds or it will expire and remember that if the question\'s output is an error, send "Error" as the answer',
+          false
+        )
+    );
+
+    const response = await message.channel
+      .awaitMessages(
+        ({ author: { bot }, content }) =>
+          !bot && content.replace(/ +/g, ' ') === answer,
+        {
+          max: 1,
+          time: 30000,
+          errors: ['time']
+        }
+      )
+      .then((collected) => collected.first().author)
+      .catch(() => null);
+
+    return message.channel.send(
+      !response
+        ? new MessageEmbed()
+            .setColor('#f0db4f')
+            .setTitle('None answered')
+            .setDescription(
+              'Nobody found the answer in 30 seconds, good luck next time!'
+            )
+            .addField('Question', `\`\`\`js\n${question}\`\`\``, false)
+            .addField('Correct answer', `\`\`\`js\n${answer}\`\`\``, false)
+        : new MessageEmbed()
+            .setColor('#f0db4f')
+            .setAuthor('Answer found!')
+            .setDescription(`${response} You guessed it correctly!`)
+            .addField('Question was', `\`\`\`js\n${question}\`\`\``, false)
+    );
+  }
+};

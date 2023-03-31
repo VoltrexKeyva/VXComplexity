@@ -1,0 +1,159 @@
+const { MessageEmbed } = require('discord.js'),
+  fetchNode = require('node-fetch'),
+  moment = require('moment');
+
+module.exports = {
+  name: 'repository',
+  description: 'Shows info about a repository.',
+  usage:
+    'repository <github repository owner username>/<gitub repository name>',
+  aliases: ['repo'],
+  category: 'general',
+  permissions: [],
+  async execute(message, args, bot) {
+    if (!args[0])
+      return message.channel.send(
+        bot.tools.invalidArguments(message, this.usage)
+      );
+
+    const repo = await fetchNode(
+      `https://api.github.com/repos/${args.join(' ')}`
+    )
+      .then((res) => res.json())
+      .catch(() => null);
+
+    if (!repo || repo.message)
+      return message.channel.send('Repository not found.');
+
+    const {
+        license,
+        name,
+        owner: { avatar_url, login, type, site_admin },
+        id,
+        fork,
+        archived,
+        disabled,
+        description,
+        created_at,
+        updated_at,
+        pushed_at,
+        homepage,
+        stargazers_count,
+        subscribers_count,
+        forks_count,
+        open_issues_count,
+        language,
+        default_branch
+      } = repo,
+      getLicense = license?.url
+        ? await fetchNode(license.url)
+            .then((res) => res.json())
+            .then((json) => json.html_url)
+        : null,
+      repoDetails = [
+        {
+          value: fork,
+          name: '**Fork**'
+        },
+        {
+          value: archived,
+          name: '**Archived**'
+        },
+        {
+          value: disabled,
+          name: '**Disabled**'
+        }
+      ]
+        .filter(({ value }) => !!value)
+        .map(({ name }) => name)
+        .join(' | '),
+      ownerDetails = [
+        {
+          value: type,
+          name: `**${type}**`
+        },
+        {
+          value: site_admin,
+          name: '**Site admin**'
+        }
+      ]
+        .filter(({ value }) => !!value)
+        .map(({ name }) => name)
+        .join(' | '),
+      repoEmbeds = [],
+      created = moment.utc(created_at),
+      mainInfoEmbed = new MessageEmbed()
+        .setAuthor('Repository information', avatar_url)
+        .addField(
+          'Name',
+          `**[${name}](https://github.com/${login}/${name})**${
+            repoDetails ? ` (${repoDetails})` : ''
+          }`,
+          false
+        )
+        .addField('ID', id, true)
+        .addField(
+          'Owner',
+          `**[${login}](https://github.com/${login})**${
+            ownerDetails ? ` (${ownerDetails})` : ''
+          }`,
+          false
+        )
+        .addField(
+          'Created at',
+          `${created.format(
+            'ddd, MMM Do, YYYY h:mm:ss a'
+          )} (${created.fromNow()})`,
+          false
+        )
+        .addField('Default branch', default_branch, true);
+
+    if (description) mainInfoEmbed.setDescription(description);
+
+    if (language) mainInfoEmbed.addField('Language', language, true);
+
+    const updated = moment.utc(updated_at),
+      pushed = moment.utc(pushed_at),
+      additionalInfoEmbed = new MessageEmbed()
+        .setAuthor('Additional information', avatar_url)
+        .addField(
+          'Updated at',
+          `${updated.format(
+            'ddd, MMM Do, YYYY h:mm:ss a'
+          )} (${updated.fromNow()})`,
+          false
+        )
+        .addField(
+          'Pushed at',
+          `${pushed.format(
+            'ddd, MMM Do, YYYY h:mm:ss a'
+          )} (${pushed.fromNow()})`,
+          false
+        )
+        .addField(
+          'Statistics',
+          `⭐ **Stars**: ${stargazers_count.toLocaleString()}\n👁️ **Watchers**: ${subscribers_count.toLocaleString()}\n<:Fork:807699202964193300> **Forks**: ${forks_count.toLocaleString()}\n⚠️ **Open issues**: ${open_issues_count.toLocaleString()}`,
+          false
+        );
+
+    if (homepage)
+      additionalInfoEmbed.addField('Homepage', `[Click Me](${homepage})`, true);
+
+    if (license)
+      additionalInfoEmbed.addField(
+        'License',
+        license.name && license.url
+          ? `[${license.name}](${getLicense})`
+          : license.name,
+        true
+      );
+
+    repoEmbeds.push(mainInfoEmbed, additionalInfoEmbed);
+
+    return bot.tools.paginate(message, {
+      type: 'embed',
+      messages: repoEmbeds.map((T) => T.setColor('#0033ff')),
+      time: 180000
+    });
+  }
+};

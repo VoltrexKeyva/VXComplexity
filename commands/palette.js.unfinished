@@ -1,0 +1,38 @@
+const { MessageEmbed } = require('discord.js'),
+  colorTheif = require('colorthief');
+
+module.exports = {
+  name: 'palette',
+  description: 'Shows color palette of an image.',
+  usage: 'palette <user|image|URL|unicode emoji|custom emoji>',
+  aliases: [],
+  category: 'fun',
+  permissions: [],
+  async execute(message, args, bot) {
+    const { title, url } = bot.tools.parseURL(
+        message,
+        args,
+        'Color palette',
+        false
+      ),
+      palette = await bot.tools.getPalette(url).catch(() => null);
+
+    if (!palette) return message.channel.send('Invalid URL.');
+
+    const getDominantColor = (await colorTheif.getColor(url, 10, true)).reduce((T, O) => {
+        const to16 = O.toString(16);
+        return T + (to16 === 1 ? `0${to16}` : to16);
+      }, '#');
+
+    return message.channel.send(
+      new MessageEmbed()
+        .setColor(getDominantColor)
+        .setAuthor(title, url)
+        .attachFiles({
+          attachment: palette,
+          name: 'ColorPalette.png',
+        })
+        .setImage('attachment://ColorPalette.png')
+    );
+  }
+};

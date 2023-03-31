@@ -1,0 +1,31 @@
+const { Util } = require('discord.js');
+
+module.exports = {
+  name: 'howrate',
+  description: 'Shows a percentage rate of how much of a N the user X is.',
+  usage: 'howrate <whatever> [| <user>]',
+  aliases: [],
+  category: 'fun',
+  permissions: [],
+  async execute(message, args, bot) {
+    const { user, seperatedContent } = bot.tools.parseUser(message, args, {
+      seperate: true
+    });
+
+    if (!seperatedContent)
+      return message.channel.send(
+        bot.tools.invalidArguments(message, this.usage)
+      );
+
+    return message.channel.send(
+      `**${Util.escapeMarkdown(user.tag)}** is ${Math.floor(
+        Math.random() * 101
+      )}% ${seperatedContent}`,
+      {
+        allowedMentions: {
+          parse: ['users']
+        }
+      }
+    );
+  }
+};

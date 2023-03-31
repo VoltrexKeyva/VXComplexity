@@ -1,0 +1,70 @@
+const {
+    Permissions: {
+      FLAGS: { ATTACH_FILES }
+    }
+  } = require('discord.js'),
+  { createCanvas, loadImage } = require('canvas'),
+  {
+    fillTextWithTwemoji
+  } = require('node-canvas-with-twemoji-and-discord-emoji');
+
+module.exports = {
+  name: 'phvideo',
+  description:
+    'Shows a ph video with the given image being shown on the screen and title as the video title.',
+  usage: 'phvideo <title> [| <user>]',
+  aliases: [],
+  category: 'fun',
+  permissions: [
+    {
+      bitfield: ATTACH_FILES,
+      onlyBot: true
+    }
+  ],
+  async execute(message, args, bot) {
+    const { user, seperatedContent: title } = bot.tools.parseUser(
+      message,
+      args,
+      {
+        seperate: true
+      }
+    );
+
+    if (!title)
+      return message.channel.send(
+        bot.tools.invalidArguments(message, this.usage)
+      );
+
+    const [template, image] = await Promise.all(
+        [
+          'https://cdn.discordapp.com/attachments/722333265771495434/731986290802950255/pogu.png',
+          user.displayAvatarURL({
+            size: 2048,
+            format: 'png',
+          }),
+        ].map((url) => loadImage(url))
+      ),
+      ctx = createCanvas(template.width, template.height).getContext('2d');
+
+    ctx.drawImage(template, 0, 0);
+    ctx.font = '31px Arial';
+    ctx.fillStyle = 'white';
+
+    await fillTextWithTwemoji(
+      ctx,
+      `${[...title].slice(0, 63).join('')}${title.length > 63 ? '...' : ''}`,
+      65,
+      889
+    );
+    ctx.drawImage(image, 315, 155, 675, 675);
+
+    return message.channel.send({
+      files: [
+        {
+          attachment: ctx.canvas.toBuffer(),
+          name: 'PHVideo.png'
+        }
+      ]
+    });
+  }
+};

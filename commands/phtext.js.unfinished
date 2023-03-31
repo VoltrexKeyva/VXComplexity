@@ -1,0 +1,56 @@
+const {
+    Permissions: {
+      FLAGS: { ATTACH_FILES }
+    }
+  } = require('discord.js'),
+  fetchNode = require('node-fetch'),
+  { alexflipnoteToken } = require('../config.json');
+
+module.exports = {
+  name: 'phtext',
+  description: 'Shows a ph logo verdion of the provided text.',
+  usage: 'phtext <text 1> | <text 2>',
+  aliases: ['phlogo'],
+  category: 'fun',
+  permissions: [
+    {
+      bitfield: ATTACH_FILES,
+      onlyBot: true
+    }
+  ],
+  async execute(message, args, bot) {
+    const parsed = await bot.tools.parseArguments(args.join(' '));
+
+    if (parsed.length < 2)
+      return message.channel.send(
+        bot.tools.invalidArguments(message, this.usage)
+      );
+
+    const buffer = await fetchNode(
+      `https://api.alexflipnote.dev/pornhub?text=${encodeURIComponent(
+        parsed[0]
+      )}&text2=${encodeURIComponent(parsed[1])}`,
+      {
+        headers: {
+          Authorization: alexflipnoteToken
+        }
+      }
+    )
+      .then((res) => res.buffer())
+      .catch(() => null);
+
+    if (!buffer)
+      return message.channel.send(
+        'Seems like something went wrong, try again later.'
+      );
+
+    return message.channel.send({
+      files: [
+        {
+          attachment: buffer,
+          name: 'PHText.png'
+        }
+      ]
+    });
+  }
+};

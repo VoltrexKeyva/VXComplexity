@@ -1,0 +1,78 @@
+const { MessageEmbed } = require('discord.js'),
+  fetchNode = require('node-fetch'),
+  turndown = new(require('turndown'))(),
+  cheerio = require('cheerio');
+
+module.exports = {
+  name: 'mdn',
+  description: 'Search through the mozilla developer network documentation.',
+  usage: 'mdn <query>',
+  aliases: [],
+  category: 'general',
+  permissions: [],
+  async execute(message, args, bot) {
+    if (!args[0])
+      return message.channel.send(
+        bot.tools.invalidArguments(message, this.usage)
+      );
+
+    const response = await fetchNode(
+        `https://api.duckduckgo.com/?q=%21%20site%3Adeveloper.mozilla.org%20${encodeURIComponent(
+        args.join(' ')
+      )}&format=json&pretty=1`,
+        {
+          redirect: true
+        }
+      )
+      .then((res) => res.json())
+      .then((redirect) =>
+        fetchNode(redirect.Redirect)
+        .then((res) => res.text())
+        .then((html) => {
+          const $ = cheerio.load(html);
+
+          const data = $('link[rel="alternate"]');
+
+          return {
+            title: data.attr('title'),
+            url: data.attr('href'),
+            description: turndown.turndown(
+              $.html($.load($('article[class="main-page-content"]').html())('p'))
+            ),
+            syntax: turndown.turndown(
+              $('pre[class="brush: js notranslate"]').html()
+            )
+          };
+        })
+      )
+      .catch(() => null);
+
+    if (!response || !response.url)
+      return message.channel.send('Nothing found for the provided query.');
+
+    const { title, url, description, syntax } = response;
+
+    const mdnEmbed = new MessageEmbed()
+      .setColor('#0033ff')
+      .setTitle(title)
+      .setURL(url)
+      .setAuthor('MDN')
+      .setDescription(
+        description
+        .split('\n')[0]
+        .replace(
+          /\[(.*?)\]\((.*?)\)/g,
+          '[$1](https://developer.mozilla.org$2)'
+        )
+      );
+
+    if (syntax)
+      mdnEmbed.addField(
+        'Syntax',
+        `\`\`\`js\n${syntax.slice(1, -1)}\n\`\`\``,
+        false
+      );
+
+    return message.channel.send(mdnEmbed);
+  }
+};

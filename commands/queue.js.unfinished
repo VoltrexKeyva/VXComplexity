@@ -1,0 +1,96 @@
+const { MessageEmbed, Util } = require('discord.js'),
+  parseMs = require('parse-ms'),
+  ms = require('ms');
+
+module.exports = {
+  name: 'queue',
+  description: 'Shows the queue for the server.',
+  usage: 'queue',
+  aliases: ['q'],
+  category: 'music',
+  permissions: [],
+  async execute(message, args, bot) {
+    const queue = bot.queue,
+      guildQueue = queue.get(message.guild.id);
+
+    if (!guildQueue || !guildQueue.songs.length)
+      return message.channel.send(
+        `The queue for **${Util.escapeMarkdown(message.guild.name)}** is empty.`
+      );
+
+    const tracks = bot.tools.chunkArray(
+        guildQueue.songs
+          .slice(1)
+          .map(
+            ({ title, url, timestamp }, i) =>
+              `**${i + 1}- [${title}](${url})** [${timestamp}]`
+          ),
+        5
+      ),
+      guildIcon = message.guild.iconURL({
+        dynamic: true,
+        size: 1024,
+        format: 'png'
+      }),
+      dateIdentifiers = {
+        0: 's',
+        1: 'm',
+        2: 'h',
+        3: 'd',
+        4: 'w',
+        5: 'month',
+        6: 'y'
+      },
+      { title, url, timestamp } = guildQueue.songs[0],
+      currentSong = `**[${title}](${url})** [${
+        timestamp.startsWith('Live')
+          ? timestamp
+          : `${((T) => {
+              const duration = Object.entries(T)
+                .filter(([K, V]) => K !== 'milliseconds' && V > 0)
+                .map(([, V]) => (V.toString().length === 1 ? `0${V}` : V));
+
+              if (duration.length === 1) duration.unshift('00');
+
+              return duration.join(':');
+            })(
+              parseMs(
+                timestamp
+                  .split(':')
+                  .reverse()
+                  .reduce((T, O, i) => T + ms(`${O}${dateIdentifiers[i]}`), 0) -
+                  (guildQueue.connection.dispatcher.streamTime + 1000)
+              )
+            )} left`
+      }]`,
+      queueLeft = guildQueue.songs[1],
+      trackEmbeds = [];
+
+    for (const chunk of tracks)
+      trackEmbeds.push(
+        new MessageEmbed()
+          .setColor('#0033ff')
+          .setAuthor('Queue', guildIcon)
+          .addField('Currently playing', currentSong, false)
+          .addField(
+            'Queue',
+            queueLeft ? chunk.join('\n') : '**Queue is empty**',
+            false
+          )
+      );
+
+    return bot.tools.paginate(message, {
+      type: 'embed',
+      messages: !trackEmbeds.length
+        ? [
+            new MessageEmbed()
+              .setColor('#0033ff')
+              .setAuthor('Queue', guildIcon)
+              .addField('Currently playing', currentSong, false)
+              .addField('Queue', '**Queue is empty**', false)
+          ]
+        : trackEmbeds,
+      time: 300000
+    });
+  }
+};

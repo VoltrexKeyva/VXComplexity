@@ -1,0 +1,59 @@
+const { MessageEmbed, Util } = require('discord.js');
+
+module.exports = {
+  name: 'skip',
+  description: 'Skips the current song/video.',
+  usage: 'skip',
+  aliases: [],
+  category: 'music',
+  permissions: [],
+  async execute(message, args, bot) {
+    const queue = bot.queue,
+      myVC = message.guild.me.voice.channel;
+
+    if (myVC && !myVC.members.has(message.author.id))
+      return message.channel.send(
+        `You have to be in the same voice channel as me to use this command. (\`${Util.escapeMarkdown(
+          myVC.name
+        )}\`)`
+      );
+
+    if (!message.member.voice.channel)
+      return message.channel.send(
+        'You have to be in a voice channel to use this command.'
+      );
+
+    const guildQueue = queue.get(message.guild.id);
+
+    if (!guildQueue) return message.channel.send("I'm not playing anything.");
+
+    let { members } = guildQueue.VoiceC;
+
+    members = members.filter(({ user: { bot } }) => !bot).size;
+
+    const currentSong = guildQueue.songs[0];
+    if (
+      members.size > 1 &&
+      (members = members / 2) &&
+      currentSong.skipVotes !== members
+    ) {
+      currentSong.skipVotes = (currentSong.skipVotes || 0) + 1;
+
+      if (currentSong.skipVotes !== members)
+        return message.channel.send(
+          `You voted to skip the current track. (**${currentSong.skipVotes.toLocaleString()}**/**${members}**)`
+        );
+    }
+
+    const { title, url } = guildQueue.songs[0];
+
+    await message.channel.send(
+      new MessageEmbed()
+      .setColor('#0033ff')
+      .setTitle('Skipped!')
+      .setDescription(`Successfully skipped **[${title}](${url})**`)
+    );
+
+    return guildQueue.connection.dispatcher.end();
+  }
+};

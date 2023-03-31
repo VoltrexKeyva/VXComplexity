@@ -1,0 +1,35 @@
+const { MessageEmbed } = require('discord.js');
+
+module.exports = {
+  name: 'suggest',
+  description: 'Suggests an idea to the bot owner.',
+  usage: 'suggest <suggestion>',
+  aliases: [],
+  category: 'general',
+  cooldown: 300000,
+  permissions: [],
+  async execute(message, args, bot) {
+    if (!args[0])
+      return message.channel.send(
+        bot.tools.invalidArguments(message, this.usage)
+      );
+
+    await (await bot.users.fetch(bot.ownerids[0])).send(
+      new MessageEmbed()
+      .setColor('#0033ff')
+      .setAuthor(
+        `${message.author.tag} have sent you a suggestion!`,
+        message.author.displayAvatarURL({
+          dynamic: true,
+          size: 1024,
+          format: 'png',
+        })
+      )
+      .setDescription(args.join(' '))
+    );
+
+    return message.channel.send(
+      'You suggestion has been sent to the bot owner!'
+    );
+  }
+};

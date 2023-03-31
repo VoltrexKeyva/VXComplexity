@@ -1,0 +1,135 @@
+const { MessageEmbed } = require('discord.js'),
+  fetchNode = require('node-fetch'),
+  moment = require('moment');
+
+const { statusObj } = require('../constants');
+
+module.exports = {
+  name: 'status',
+  description: 'Shows the status of discord.',
+  usage: 'status',
+  aliases: [],
+  category: 'general',
+  permissions: [],
+  async execute(message, args, bot) {
+    const [component, incident] = await Promise.all(
+      [
+        'https://srhpyqt94yxb.statuspage.io/api/v2/components.json',
+        'https://srhpyqt94yxb.statuspage.io/api/v2/incidents.json'
+      ].map((api) =>
+        fetchNode(api)
+          .then((res) => res.json())
+          .catch(() => null)
+      )
+    );
+
+    if (!component || !incident)
+      return message.channel.send('Something went wrong, try again later.');
+
+    const {
+        page: { url, time_zone, updated_at },
+        components
+      } = component,
+      discordRotationLogo =
+        'https://media1.tenor.com/images/83cdd1dd40cdb87020949e0f075b9648/tenor.gif?itemid=11230336',
+      updated = moment.utc(updated_at),
+      pageEmbed = new MessageEmbed()
+        .setColor('#0033ff')
+        .setAuthor('Page', discordRotationLogo)
+        .addField('URL', url, false)
+        .addField('Time zone', time_zone, true)
+        .addField(
+          'Updated at',
+          `${updated.format(
+            'ddd, MMM Do, YYYY, h:mm:ss a'
+          )}\n(${updated.fromNow()})`
+        ),
+      componentsEmbed = new MessageEmbed()
+        .setColor('#0033ff')
+        .setAuthor('Components', discordRotationLogo)
+        .setDescription(
+          components
+            .map(({ name, status }, i) => `${i + 1}- ${name} | ${status}`)
+            .join('\n')
+            .replace(
+              new RegExp(`(${Object.keys(statusObj).join('|')})`, 'g'),
+              (match) => statusObj[match]
+            )
+        ),
+      {
+        name,
+        shortlink,
+        status,
+        impact,
+        created_at: create,
+        updated_at: update,
+        monitoring_at: monitor,
+        resolved_at: resolve,
+        incident_updates
+      } = incident.incidents[0],
+      createTime = moment.utc(create),
+      updateTime = moment.utc(update),
+      monitorTime = moment.utc(monitor),
+      resolveTime = moment.utc(resolve),
+      latestIncidentEmbed = new MessageEmbed()
+        .setColor('#0033ff')
+        .setAuthor('Latest incident', discordRotationLogo)
+        .addField('Incident', `[${name}](${shortlink})`, false);
+
+    if (status)
+      latestIncidentEmbed.addField(
+        'Status',
+        status.toProperCase().replace('null', statusObj['null']),
+        true
+      );
+
+    if (impact)
+      latestIncidentEmbed.addField(
+        'Impact',
+        impact.toProperCase().replace('null', statusObj['null']),
+        true
+      );
+
+    latestIncidentEmbed.addField(
+      'Created at',
+      `${createTime.format(
+        'ddd, MMM Do, YYYY, h:mm:ss a'
+      )}\n(${createTime.fromNow()})`
+    );
+
+    if (update)
+      latestIncidentEmbed.addField(
+        'Updated at',
+        `${updateTime.format(
+          'ddd, MMM Do, YYYY, h:mm:ss a'
+        )}\n(${updateTime.fromNow()})`
+      );
+
+    if (monitor)
+      latestIncidentEmbed.addField(
+        'Monitoring at',
+        `${monitorTime.format(
+          'ddd, MMM Do, YYYY, h:mm:ss a'
+        )}\n(${monitorTime.fromNow()})`
+      );
+
+    if (resolve)
+      latestIncidentEmbed.addField(
+        'Resolved at',
+        `${resolveTime.format(
+          'ddd, MMM Do, YYYY, h:mm:ss a'
+        )}\n(${resolveTime.fromNow()})`
+      );
+
+    const latestIncidentUpdate = incident.incidents[0].incident_updates[0];
+
+    if (latestIncidentUpdate)
+      latestIncidentEmbed.addField('Latest update', latestIncidentUpdate.body);
+
+    return bot.tools.paginate(message, {
+      type: 'embed',
+      messages: [pageEmbed, componentsEmbed, latestIncidentEmbed],
+      time: 180000
+    });
+  }
+};

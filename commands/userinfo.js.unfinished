@@ -1,0 +1,360 @@
+const { MessageEmbed, Util } = require('discord.js'),
+  moment = require('moment'),
+  cheerio = require('cheerio'),
+  twemoji = require('twemoji');
+
+module.exports = {
+  name: 'userinfo',
+  description: 'Shows info about a user.',
+  usage: 'userinfo [user]',
+  aliases: ['ui'],
+  category: 'general',
+  permissions: [],
+  async execute(message, args, bot) {
+    const member = bot.tools.parseUser(message, args, {
+        member: true
+      }),
+      { user } = member,
+      userAvatar = user.displayAvatarURL({
+        dynamic: true,
+        size: 2048,
+        format: 'png'
+      });
+
+    const userInfoEmbeds = [];
+
+    let status,
+      clientStatus = user.presence.clientStatus;
+
+    switch (user.presence.status) {
+      case 'online':
+        status = '<:emoji_69:702504065564672020>';
+        break;
+      case 'idle':
+        status = '<:emoji_70:702504433996660747>';
+        break;
+      case 'dnd':
+        status = '<:emoji_71:702504481119535184>';
+        break;
+      case 'offline':
+        status = '<:emoji_72:702504515496181852>';
+    }
+
+    const clientStatusKeys = Object.keys(clientStatus || {}),
+      clientStatuses = {
+        mobile: '<:Mobile:717741682417729556>',
+        desktop: '<:Desktop:717741609709731891>',
+        web: '<:Web:720087854302101545>'
+      };
+
+    clientStatus =
+      !clientStatus || !clientStatusKeys.length
+        ? '<:NotAvailable:717742648194105447>'
+        : clientStatusKeys.map((key) => clientStatuses[key]).join(' ');
+
+    const created = moment.utc(user.createdTimestamp);
+
+    let flags = (await user.fetchFlags())
+      .toArray()
+      .filter(
+        (flag) => !['VERIFIED_DEVELOPER', 'DISCORD_PARTNER'].includes(flag)
+      );
+
+    const premiumGuilds = bot.guilds.cache.filter(
+      ({ members: { cache } }) => cache.get(user.id)?.premiumSinceTimestamp
+    );
+
+    if (
+      user.avatar?.startsWith('a_') ||
+      user.discriminator.startsWith('000') ||
+      user.discriminator.endsWith('000') ||
+      [
+        '0420',
+        '0069',
+        '6942',
+        '6900',
+        '6969',
+        '1234',
+        ...Array.from({ length: 8 }, (_, i) => (i + 1).toString().repeat(4))
+      ].includes(user.discriminator) ||
+      user.presence.activities.some(
+        ({ type, emoji }) => type === 'CUSTOM_STATUS' && emoji?.id
+      ) ||
+      member.premiumSinceTimestamp ||
+      premiumGuilds.size
+    )
+      flags.push('<:DiscordNitro:717720071329284178> • Discord Nitro');
+
+    if (premiumGuilds.size) {
+      const checkPremium = premiumGuilds.reduce(
+        (T, { members: { cache } }) =>
+          T +
+          Math.round(
+            moment
+              .duration(Date.now() - cache.get(user.id).premiumSinceTimestamp)
+              .asMonths()
+          ),
+        0
+      );
+
+      const boostLevels = {
+        0: '<:boost_0:715860819195461832>',
+        get 1() {
+          return this[0];
+        },
+        2: '<:boost_e:715860966855802880>',
+        3: '<:booster3:585764446220189716>',
+        get 4() {
+          return this[3];
+        },
+        get 5() {
+          return this[3];
+        },
+        6: '<:boost_b:715860665301991437>',
+        get 7() {
+          return this[6];
+        },
+        get 8() {
+          return this[6];
+        },
+        9: '<:boost_a:715860471084875809>',
+        get 10() {
+          return this[9];
+        },
+        get 11() {
+          return this[9];
+        },
+        12: '<:boost_st:715861027484336169>',
+        get 13() {
+          return this[12];
+        },
+        get 14() {
+          return this[12];
+        },
+        15: '<:booster:660789028861509633>',
+        get 16() {
+          return this[15];
+        },
+        get 17() {
+          return this[15];
+        },
+        18: '<:ServerBooster_m:720195724226199562>',
+        get 19() {
+          return this[18];
+        },
+        get 20() {
+          return this[18];
+        },
+        get 21() {
+          return this[18];
+        },
+        get 22() {
+          return this[18];
+        },
+        get 23() {
+          return this[18];
+        }
+      };
+
+      flags.push(
+        `${
+          boostLevels[checkPremium] || '<:boost_c:715860592581279745>'
+        } • Discord Nitro Booster`
+      );
+    }
+
+    const flagsObj = {
+      DISCORD_EMPLOYEE:
+        '<:DiscordEmployee:705858982836961330> • Discord Employee',
+      PARTNERED_SERVER_OWNER:
+        '<:discord_partner:748998627015393311> • Partnered Server Owner',
+      HYPESQUAD_EVENTS:
+        '<:DiscordHypeSquadEvents:705861903175647344> • HypeSquad Events',
+      BUGHUNTER_LEVEL_1:
+        '<:DiscordBugHunter:705862833925259377> • Bug Hunter(Level 1)',
+      HOUSE_BRAVERY:
+        '<:DiscordBravery:705865208123490327> • HypeSquad House(Bravery)',
+      HOUSE_BRILLIANCE:
+        '<:DiscordBrilliance:705865950829740064> • HypeSquad House(Brilliance)',
+      HOUSE_BALANCE:
+        '<:DiscordBalance:705866474841178144> • HypeSquad House(Balance)',
+      EARLY_SUPPORTER:
+        '<:DiscordEarlySupporter:705866972142895227> • Early Nitro Supporter',
+      TEAM_USER: '**[ Team User ]**',
+      SYSTEM: '<:DiscordSystem:705872771636265003> • Discord System User',
+      BUGHUNTER_LEVEL_2:
+        '<:DiscordBugHunter2:705874823611416596> • Bug Hunter(Level 2)',
+      VERIFIED_BOT:
+        '<:DiscordVerifiedBot:705876359506952303> • Verified Discord Bot',
+      EARLY_VERIFIED_DEVELOPER:
+        '<:DiscordEarlyVerifiedBotDev:705876864714932264> • Early Verified Bot Developer'
+    };
+
+    flags = flags.map((flag) => flagsObj[flag] || flag);
+
+    const color =
+      member.displayHexColor === '#000000' ? '#ffffff' : member.displayHexColor;
+
+    const mainInfoEmbed = new MessageEmbed()
+      .setColor(color)
+      .setAuthor('User information', userAvatar)
+      .addField(
+        'Tag',
+        `${status} ${Util.escapeMarkdown(user.tag)} ${clientStatus} [${user}]`,
+        false
+      )
+      .addField('ID', user.id, true)
+      .addField('Type', user.bot ? 'Bot' : 'User', true)
+      .addField(
+        'Created at',
+        `${created.format(
+          'ddd, MMM Do, YYYY h:mm:ss a'
+        )} (${created.fromNow()})`,
+        false
+      );
+
+    if (user.presence.activities.length)
+      mainInfoEmbed.addField(
+        'Activities',
+        user.presence.activities.map(
+          ({ type, state, name }, i) =>
+            `**${i + 1}.** ${
+              type === 'LISTENING'
+                ? 'Listening to'
+                : type.toLowerCase().replace(/\_/g, ' ').toProperCase()
+            }: ${
+              type === 'CUSTOM_STATUS'
+                ? state ||
+                  '`(No custom status state, see last page for the custom emoji)`'
+                : name
+            }`
+        ),
+        false
+      );
+
+    if (flags.length) mainInfoEmbed.addField('Badges', flags.join('\n'), false);
+
+    userInfoEmbeds.push(mainInfoEmbed);
+
+    const joined = moment.utc(member.joinedTimestamp),
+      memberInfoEmbed = new MessageEmbed()
+        .setColor(color)
+        .setAuthor('Member information', userAvatar)
+        .addField(
+          'Joined at',
+          `${joined.format(
+            'ddd, MMM Do, YYYY h:mm:ss a'
+          )} (${joined.fromNow()})`,
+          false
+        );
+
+    const sorted = message.guild.members.cache
+        .sort((a, b) => a.joinedTimestamp - b.joinedTimestamp)
+        .array(),
+      memberJoinIndex = sorted.findIndex(({ id }) => id === user.id),
+      before = sorted[memberJoinIndex - 1],
+      after = sorted[memberJoinIndex + 1];
+
+    memberInfoEmbed.addField(
+      `Join position (#${(
+        memberJoinIndex + 1
+      ).toLocaleString()}/#${message.guild.memberCount.toLocaleString()})`,
+      `${
+        before ? `**${Util.escapeMarkdown(before.user.tag)}** → ` : ''
+      }**${Util.escapeMarkdown(user.tag)}**${
+        after ? ` → **${Util.escapeMarkdown(after.user.tag)}**` : ''
+      }`,
+      false
+    );
+
+    if (member.premiumSinceTimestamp) {
+      const boosted = moment.utc(member.premiumSinceTimestamp);
+
+      memberInfoEmbed.addField(
+        'Boosted at',
+        `${boosted.format(
+          'ddd, MMM Do, YYYY h:mm:ss a'
+        )} (${boosted.fromNow()})`,
+        false
+      );
+    }
+
+    if (member.nickname)
+      memberInfoEmbed.addField(
+        'Nickname',
+        Util.escapeMarkdown(member.nickname),
+        false
+      );
+
+    if (member.voice.channel)
+      memberInfoEmbed.addField(
+        'Voice channel',
+        `Currently connected to \`${member.voice.channel.name}\``,
+        false
+      );
+
+    const perms = member.permissions.toArray();
+
+    if (perms.length)
+      memberInfoEmbed.addField(
+        'Permissions',
+        perms.includes('ADMINISTRATOR')
+          ? 'Administrator (All permissions)'
+          : perms
+              .map((permission) =>
+                permission.toLowerCase().replace(/\_/g, ' ').toProperCase()
+              )
+              .join(', '),
+        false
+      );
+
+    userInfoEmbeds.push(memberInfoEmbed);
+
+    const roles = member.roles.cache
+        .filter(({ id }) => id !== message.guild.id)
+        .sort((a, b) => b.position - a.position),
+      chunks = bot.tools.chunkArray(roles.array(), 15);
+
+    if (roles.size) {
+      for (let i = 0; i < chunks.length; i++)
+        userInfoEmbeds.push(
+          new MessageEmbed()
+            .setColor(color)
+            .setAuthor(`Member roles | Page ${i + 1}`, userAvatar)
+            .setDescription(chunks[i].join(' | '))
+        );
+    }
+
+    const userAvatarEmbed = new MessageEmbed()
+      .setColor(color)
+      .setAuthor('User avatar', userAvatar)
+      .setImage(userAvatar);
+
+    userInfoEmbeds.push(userAvatarEmbed);
+
+    const customStatusEmoji = user.presence.activities.find(
+      ({ type, emoji }) => type === 'CUSTOM_STATUS' && emoji
+    )?.emoji;
+
+    if (customStatusEmoji) {
+      const customStatusEmojiEmbed = new MessageEmbed()
+        .setColor(color)
+        .setAuthor('Custom status emoji', userAvatar)
+        .setImage(
+          customStatusEmoji.id
+            ? customStatusEmoji.url
+            : cheerio
+                .load(twemoji.parse(customStatusEmoji.name))('img')
+                .attr('src')
+        );
+
+      userInfoEmbeds.push(customStatusEmojiEmbed);
+    }
+
+    return bot.tools.paginate(message, {
+      type: 'embed',
+      messages: userInfoEmbeds,
+      time: 300000
+    });
+  }
+};

@@ -1,0 +1,66 @@
+const {
+    Permissions: {
+      FLAGS: { ATTACH_FILES }
+    }
+  } = require('discord.js'),
+  fetchNode = require('node-fetch'),
+  { alexflipnoteToken } = require('../config.json'),
+  stringToolkit = require('string-toolkit');
+
+module.exports = {
+  name: 'supreme',
+  description: 'Shows a supreme logo version of the provided text.',
+  usage: 'supreme <text> [--light|--dark]',
+  aliases: [],
+  category: 'fun',
+  permissions: [
+    {
+      bitfield: ATTACH_FILES,
+      onlyBot: true
+    }
+  ],
+  async execute(message, args, bot) {
+    if (!args[0])
+      return message.channel.send(
+        bot.tools.invalidArguments(message, this.usage)
+      );
+
+    const { flags, contentNoOptions: content } = stringToolkit.parseOptions(
+      args
+    );
+
+    const flag = ['light', 'dark'].find(
+      (T) => T === flags[flags.length - 1]?.toLowerCase()
+    );
+
+    if (flag && !content)
+      return message.channel.send(
+        bot.tools.invalidArguments(message, this.usage)
+      );
+
+    const buffer = await fetchNode(
+      `https://api.alexflipnote.dev/supreme?text=${encodeURIComponent(
+        content
+      )}${flag ? `&${flag}=true` : ''}`,
+      {
+        headers: {
+          Authorization: alexflipnoteToken
+        }
+      }
+    )
+      .then((res) => res.buffer())
+      .catch(() => null);
+
+    if (!buffer)
+      return message.channel.send('Something went wrong, try again later.');
+
+    return message.channel.send({
+      files: [
+        {
+          attachment: buffer,
+          name: 'Supreme.png'
+        }
+      ]
+    });
+  }
+};

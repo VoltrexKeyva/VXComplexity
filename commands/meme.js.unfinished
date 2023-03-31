@@ -1,0 +1,51 @@
+const { MessageEmbed, Util } = require('discord.js'),
+  fetchNode = require('node-fetch'),
+  randomSubreddits = ['dankmemes', 'memes'];
+
+module.exports = {
+  name: 'meme',
+  description: 'Shows a random meme image/gif.',
+  usage: 'meme',
+  aliases: [],
+  category: 'fun',
+  permissions: [],
+  async execute(message, args, bot) {
+    const randomSubreddit = randomSubreddits[Math.floor(Math.random() * 2)];
+    const posts = await fetchNode(
+        `https://www.reddit.com/r/${randomSubreddit}.json?sort=top&t=week`
+      )
+      .then((res) => res.json())
+      .then((json) =>
+        message.channel.nsfw ?
+        json.data.children.filter((post) => post.data.url) :
+        json.data.children.filter(
+          (post) => post.data.url && !post.data.over_18
+        )
+      )
+      .catch(() => null);
+
+    if (!posts?.length)
+      return message.channel.send(
+        "Wasn't able to find any fresh memes, try again later."
+      );
+
+    const {
+      data: { title, url, author, ups, num_comments },
+    } = posts[Math.floor(Math.random() * posts.length)];
+
+    return message.channel.send(
+      new MessageEmbed()
+      .setColor('RANDOM')
+      .setTitle('Random meme')
+      .setDescription(
+        `**[${title}](${url})**\nPosted by **${Util.escapeMarkdown(author)}**`
+      )
+      .setImage(url)
+      .addField(
+        'Upvotes and comments',
+        `<:RedditUpvote:792581199670411344> **${ups.toLocaleString()}** • <:RedditComment:792581357901578241> **${num_comments.toLocaleString()}**`,
+        false
+      )
+    );
+  }
+};

@@ -1,0 +1,46 @@
+const { MessageEmbed } = require('discord.js');
+
+module.exports = {
+  name: 'privacypolicy',
+  description: 'Shows the privacy policy of the bot.',
+  usage: 'privacypolicy',
+  aliases: [],
+  category: 'general',
+  permissions: [],
+  async execute(message, args, bot) {
+    return message.channel.send(
+      new MessageEmbed()
+      .setColor('#0033ff')
+      .setAuthor(
+        'Privacy Policy',
+        bot.user.displayAvatarURL({
+          dynamic: true,
+          size: 1024,
+          format: 'png'
+        })
+      )
+      .addField(
+        'Stored data',
+        "This bot stores data such as **Guild ID** and **User ID** for the sake of determination of things bound with the user and the bot, specifically with it's database.",
+        false
+      )
+      .addField(
+        'Stored data usage',
+        "The stored **Guild ID** is being used to determine the configurations for that specific guild required for the bot itself such as `custom prefixes`, stored **User ID** are used for determining the user's configurations done with this bot and bound with it's database, in addition, Determining which object in a collection of the bot's database belongs to the user, such as their `coins` along with their IDs, and this is also used for leaderboards.",
+        false
+      )
+      .addField(
+        'Is storing data allowed?',
+        "Well obviously it's allowed for the bot to collect data and store from every guild it joins by oauth2, which oauth2 requires user agreement, only users who control that specific guild authorizes this oauth2 so the bot joins the guild and has permission to collect data, **Storing data is only not allowed if the bot is going to do harmful stuff with the collected/stored data**, and hence exposing user data in guilds that the user is not present is not allowed which this bot keeps every data to it's guild it belongs.",
+        false
+      )
+      .addField(
+        `Privacy Policy for ${bot.user.tag}`,
+        `Written by ${
+            (await bot.users.fetch(bot.ownerids[0])).tag
+          }\n**Note:**\nIf you have any questions about the privacy policy of the bot written in this embed, please contact me by sliding right into my DMs.`,
+        false
+      )
+    );
+  }
+};

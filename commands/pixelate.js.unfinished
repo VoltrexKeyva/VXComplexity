@@ -1,0 +1,66 @@
+const {
+    Permissions: {
+      FLAGS: { ATTACH_FILES }
+    }
+  } = require('discord.js'),
+  { createCanvas, loadImage } = require('canvas');
+
+module.exports = {
+  name: 'pixelate',
+  description: 'Shows a pixelated version of an image.',
+  usage: 'pixelate <user|image|link|unicode emoji|custom emoji>',
+  aliases: [],
+  category: 'fun',
+  permissions: [
+    {
+      bitfield: ATTACH_FILES,
+      onlyBot: true
+    }
+  ],
+  async execute(message, args, bot) {
+    const { url, title } = bot.tools.parseURL(
+        message,
+        args,
+        'Pixelated version',
+        false
+      ),
+      image = await loadImage(url),
+      ctx = createCanvas(image.width, image.height).getContext('2d'),
+      size = 0.1,
+      width = ctx.canvas.width * size,
+      height = ctx.canvas.height * size;
+
+    ctx.msImageSmoothingEnabled = false;
+    ctx.mozImageSmoothingEnabled = false;
+    ctx.webkitImageSmoothingEnabled = false;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(image, 0, 0, width, height);
+    ctx.drawImage(
+      ctx.canvas,
+      0,
+      0,
+      width,
+      height,
+      0,
+      0,
+      ctx.canvas.width,
+      ctx.canvas.height
+    );
+
+    const buffer = ctx.canvas.toBuffer();
+
+    if (Buffer.byteLength(buffer) / 2 ** 1024 > 8)
+      return message.channel.send(
+        "The output file size is higher than 8MB which I can't send."
+      );
+
+    return message.channel.send(title, {
+      files: [
+        {
+          attachment: buffer,
+          name: 'Pixelate.png'
+        }
+      ]
+    });
+  }
+};

@@ -1,0 +1,126 @@
+const { MessageEmbed, Util } = require('discord.js');
+
+module.exports = {
+  name: 'loop',
+  description: 'Loops a song/video.',
+  usage: 'loop',
+  aliases: [],
+  category: 'music',
+  permissions: [],
+  async execute(message, args, bot) {
+    const queue = bot.queue;
+
+    if (
+      message.guild.me.voice.channel &&
+      !message.guild.me.voice.channel.members.has(message.author.id)
+    )
+      return message.channel.send(
+        `You have to be in the same voice channel as me to use this command. (\`${message.guild.me.voice.channel.name}\`)`
+      );
+
+    if (!message.member.voice.channel)
+      return message.channel.send(
+        'You have to be in a voice channel to use this command.'
+      );
+
+    const guildQueue = queue.get(message.guild.id);
+
+    if (!guildQueue)
+      return message.channel.send(
+        "What are you trying to loop? I'm not playing anything."
+      );
+
+    const { requester, looping, voteGoing, title, url } = guildQueue.songs[0];
+
+    if (
+      guildQueue.VoiceC.members.has(requester.id) &&
+      requester.id !== message.author.id
+    )
+      return message.channel.send(
+        `Only the requester of this song can perform this action until they leave the voice channel. (${Util.escapeMarkdown(
+          requester.tag
+        )})`
+      );
+
+    if (looping) {
+      guildQueue.songs[0].looping = false;
+
+      return message.channel.send(
+        new MessageEmbed()
+          .setColor('#0033ff')
+          .setTitle('Unlooped')
+          .setDescription(`Successfully unlooped [${title}](${url})`)
+      );
+    }
+
+    if (
+      guildQueue.VoiceC.members.filter(({ user: { bot } }) => !bot).size === 1
+    ) {
+      guildQueue.songs[0].looping = true;
+
+      return message.channel.send(
+        new MessageEmbed()
+          .setColor('#0033ff')
+          .setTitle('Looped')
+          .setDescription(`Successfully looped [${title}](${url})`)
+      );
+    }
+
+    if (voteGoing)
+      return message.channel.send(
+        "There's already a vote session going on in this channel."
+      );
+    else {
+      const reactors = [];
+
+      guildQueue.songs[0].voteGoing = true;
+
+      const voteMessage = await message.channel.send(
+        new MessageEmbed()
+          .setColor('#0033ff')
+          .setTitle('Time to vote')
+          .setDescription(
+            `Vote to loop [${title}](${url})\n(**${(
+              guildQueue.VoiceC.members.filter((m) => !m.user.bot).size / 2
+            ).toLocaleString()}** votes expected)`
+          )
+      );
+
+      await voteMessage.react('✅');
+
+      const result = await voteMessage
+        .awaitReactions(
+          ({ emoji: { name } }, { id, bot }) =>
+            name === '✅' &&
+            !reactors.includes(id) &&
+            !bot &&
+            guildQueue.VoiceC.members.has(id) &&
+            reactors.push(id),
+          {
+            max:
+              guildQueue.VoiceC.members.filter(({ user: { bot } }) => !bot)
+                .size / 2,
+            time: 25000,
+            errors: ['time']
+          }
+        )
+        .catch(() => null);
+
+      guildQueue.songs[0].voteGoing = false;
+
+      if (!result)
+        return message.channel.send(
+          'Not enough votes recieved to loop the current track.'
+        );
+
+      guildQueue.songs[0].looping = true;
+
+      return message.channel.send(
+        new MessageEmbed()
+          .setColor('#0033ff')
+          .setTitle('Looped')
+          .setDescription(`Successfully looped [${title}](${url})`)
+      );
+    }
+  }
+};

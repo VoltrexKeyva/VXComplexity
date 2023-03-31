@@ -1,0 +1,204 @@
+const {
+    Permissions: {
+      FLAGS: { ATTACH_FILES }
+    }
+  } = require('discord.js'),
+  {
+    fillTextWithTwemoji
+  } = require('node-canvas-with-twemoji-and-discord-emoji'),
+  { createCanvas, loadImage } = require('canvas')
+  let prIcon = loadImage(
+    'https://cdn.discordapp.com/attachments/702754293387886602/830954253110476800/git-pull-request_1.png'
+  );
+  const states = {
+    open: 'green',
+    closed: 'red'
+  },
+  fetchNode = require('node-fetch'),
+  moment = require('moment'),
+  { githubToken } = require('../config.json');
+  let mergeIcon = loadImage('https://cdn.discordapp.com/attachments/702754293387886602/830953266702450749/git-merge_1.png');
+  
+  async function wordWrap(ctx, text, fontSize = 5, fontColor = 'white', fontFamily = 'sans-serif', x, y) {
+    const maxWidth = ctx.canvas.width - 300,
+    lines = [];
+    let result, width = 0, i, j;
+
+    ctx.font = `${fontSize}px ${fontFamily}`;
+
+    while (text.length) {
+      for (i = text.length; ctx.measureText(text.slice(0, i)).width > maxWidth; i--);
+
+      result = text.slice(0, i);
+
+      if (i !== text.length) for (j = 0; result.indexOf(' ', j) !== -1; j = result.indexOf(' ', j) + 1);
+
+      lines.push(text.slice(0, j || result.length));
+      width = Math.max(width, ctx.measureText(lines[lines.length - 1]).width);
+      text = text.substr(lines[lines.length - 1].length, text.length);
+    }
+    
+    ctx.font = `${fontSize}px ${fontFamily}`;
+
+    ctx.fillStyle = fontColor;
+    for (i = 0, j = lines.length; i < j; ++i) await fillTextWithTwemoji(ctx, lines[i], x, y + fontSize + (fontSize + 5) * i);
+  }
+
+  function recolorImage(image, color) {
+    const ctxR = createCanvas(image.width, image.height).getContext('2d');
+    ctxR.drawImage(image, 0, 0);
+    ctxR.globalCompositeOperation = 'source-in';
+    ctxR.fillStyle = color;
+    ctxR.fillRect(0, 0, ctxR.canvas.width, ctxR.canvas.height);
+    return ctxR.canvas.toBuffer();
+  }
+
+module.exports = {
+  name: 'ghpr',
+  description: 'Shows ddtails of a github pull request.',
+  usage: 'ghpr <repository owner/repository name/pull request number>',
+  aliases: [],
+  category: 'general',
+  permissions: [
+    {
+      bitfield: ATTACH_FILES,
+      onlyBot: true
+    }
+  ],
+  async execute(message, args, bot) {
+    if (!args[0] || !/.*\/.*\/\d+/.test(args[0]))
+      return message.channel.send(
+        bot.tools.invalidArguments(message, this.usage)
+      );
+
+    const [owner, repo, id] = args[0].split('/'),
+      pr = await fetchNode(
+        `https://api.github.com/repos/${owner}/${repo}/pulls/${id}`, {
+            headers: {
+             Authorization: githubToken
+            }
+        }
+      )
+        .then((res) => res.json())
+        .catch(() => null);
+
+    if (!pr || pr.message) return message.channel.send(pr.message?.startsWith('API') ? 'Ratelimit.' : 'Pull request not found.');
+
+    prIcon = await prIcon;
+    mergeIcon = await mergeIcon;
+
+    const ctx = createCanvas(1300, 900).getContext('2d');
+
+    ctx.fillStyle = '#1f2839';
+    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height)
+    ctx.drawImage(await loadImage(pr.base.user.avatar_url), 100, 64, 35, 35);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(1190, 105, 79, 0, 2 * Math.PI);
+    ctx.closePath();
+    ctx.strokeStyle = 'white';
+    ctx.stroke();
+    ctx.clip();
+    ctx.drawImage(await loadImage(pr.user.avatar_url), 1110, 26, 160, 160);
+    ctx.restore();
+    ctx.fillStyle = 'white';
+    ctx.font = '35px WhitneyLight';
+    await fillTextWithTwemoji(
+      ctx,
+      `${pr.base.user.login}/${
+        pr.base.repo.name
+      } | ⭐ ${pr.base.repo.stargazers_count.toLocaleString()}`,
+      150,
+      95
+    );
+    ctx.fillStyle = '#757c81';
+    ctx.font = '75px sans-serif'
+    await fillTextWithTwemoji(ctx, `#${pr.number}`, 191, 195);
+    ctx.drawImage(
+      pr.merged_at ? await loadImage(recolorImage(mergeIcon, 'purple')) : await loadImage(recolorImage(prIcon, pr.draft ? 'grey' : states[pr.state])),
+      100,
+      131,
+      70,
+      70
+    );
+
+    ctx.globalAlpha = 0.2;
+    let h = 219, coords = [];
+    for (let i = 0, x = 100; i < pr.labels.length; i++) {
+        const label = pr.labels[i];
+      ctx.strokeStyle = ctx.fillStyle = `#${label.color}`;
+      ctx.font = '50px WhitneyBold';
+      const w = ctx.measureText(label.name).width;
+      ctx.font = '75px WhitneyBold';
+     if ((x + (w + 15)) > ctx.canvas.width) {
+         h += 69;
+         x = 100;
+     }
+     coords.push({
+         x,
+         y: h,
+         color: label.color,
+         name: label.name
+     });
+     const rRect = ctx.roundRect(x, h, w, 45, 45);
+      rRect.stroke();
+      rRect.fill();
+      x += w + 15;
+    }
+    
+    ctx.globalAlpha = 1;
+    ctx.font = '40px WhitneyBold';
+    for (const { x, y, color, name } of coords) {
+        ctx.fillStyle = `#${color}`;
+        ctx.fillText(name, x + (2.1 * name.length), y + 35);
+    }
+
+    await wordWrap(ctx, pr.title, 65, 'white', 'WhitneyBold', 105, pr.labels.length ? h + 50 : 200);
+    
+    ctx.fillStyle = 'black';
+    ctx.fillRect(0, 650, ctx.canvas.width, 10);
+    ctx.fillRect(0, 750, ctx.canvas.width, 10);
+    
+    ctx.drawImage(await loadImage(recolorImage(await loadImage('https://cdn.discordapp.com/attachments/702754293387886602/830901105340579890/998d547cf85b32ee9ca981691f866166.png'), 'grey')), 25, 680, 50, 50);
+    ctx.fillStyle = 'grey';
+    ctx.font = '35px WhitneyBold';
+    ctx.fillText(`${pr.comments.toLocaleString()} Comment${pr.comments === 1 ? '' : 's'}`, 87, 719);
+    
+    ctx.drawImage(await loadImage(recolorImage(await loadImage('https://cdn.discordapp.com/attachments/702754293387886602/830955175307902976/code-review.png'), 'grey')), 350, 680, 50, 50);
+    
+    const reviews = await fetchNode(`https://api.github.com/repos/${owner}/${repo}/pulls/${id}/reviews?per_page=100`, {
+        headers: {
+            Authorization: githubToken
+        }
+    }).then(res => res.json()).then(json => json.length);
+      
+      ctx.fillText(`${reviews.toLocaleString()} Review${reviews === 1 ? '' : 's'}`, 415, 719);
+      
+      ctx.drawImage(await loadImage(recolorImage(await loadImage('https://cdn.discordapp.com/attachments/702754293387886602/830954825867853884/file-diff.png'), 'grey')), 635, 680, 50, 50);
+      
+      ctx.fillText(`${pr.changed_files.toLocaleString()} Changed file${pr.changed_files === 1 ? '' : 's'}`, 700, 719);
+      
+      ctx.fillStyle = 'green';
+      ctx.font = '35px WhitneyBold';
+      const additions = `${pr.additions.toLocaleString()}+`;
+      ctx.fillText(additions, 995, 719);
+      ctx.fillStyle = 'red';
+      ctx.fillText(`${pr.deletions.toLocaleString()}-`, 995 + ctx.measureText(additions).width + 35, 719);
+      
+      ctx.font = '45px WhitneyBold';
+      ctx.fillStyle = 'white';
+      ctx.fillText(pr.user.login, 35, 850);
+      
+      ctx.font = '45px WhitneyLight';
+      ctx.fillText(`opened this ${moment.utc(pr.created_at).fromNow()} | ${pr.commits.toLocaleString()} Commit${pr.commits === 1 ? '' : 's'}`, 59 + ctx.measureText(pr.user.login).width, 850);
+      
+    return message.channel.send({
+      files: [
+        { 
+          attachment: ctx.canvas.toBuffer(), 
+          name: 'Github-pull-request.png' 
+        }
+      ]
+    })
+  }
+};
